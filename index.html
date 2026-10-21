@@ -1,0 +1,1685 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>質因數分解互動學習網</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+
+  <script>
+    window.MathJax = {
+      tex: { inlineMath: [['$', '$'], ['\\(', '\\)']], displayMath: [['$$', '$$'], ['\\[', '\\]']], processEscapes: true },
+      options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'input', 'select', 'option'] },
+      startup: { typeset: true }
+    };
+  </script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+  <style>
+    .hidden { display: none; }   /* Tailwind CDN 被擋時的保底 */
+    body { font-family: 'Inter', 'Noto Sans TC', sans-serif; background-color: #f8fafc; color: #1e293b; overflow-x: hidden; }
+    .touch-target { min-height: 44px; }
+    .short-division-table { border-collapse: collapse; font-family: 'Inter', monospace; font-size: 1.2rem; margin: 0 auto; }
+    .short-division-table td { padding: 0.4rem 0.85rem; text-align: right; }
+    .sd-divisor { color: #e11d48; font-weight: 800; padding-right: 0.6rem !important; }
+    .sd-dividend { border-left: 2.5px solid #334155; border-bottom: 2.5px solid #334155; font-weight: 700; color: #0f172a; min-width: 75px; }
+    .sd-remainder { font-weight: 800; color: #059669; padding-top: 0.5rem !important; }
+    .sd-new td { animation: rowIn .35s ease-out; }
+    @keyframes rowIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+    @keyframes floatSlow { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+    .sieve-cell { aspect-ratio: 1 / 1; display: flex; align-items: center; justify-content: center; border-radius: .6rem; font-weight: 800; font-size: .9rem; position: relative; transition: background-color .3s, color .3s, opacity .3s; user-select: none; }
+    .sieve-cell.crossed { opacity: .35; text-decoration: line-through; text-decoration-thickness: 2px; }
+    .sieve-cell.prime { box-shadow: inset 0 0 0 3px currentColor; }
+    @keyframes pulseWarn { 0%,100% { box-shadow: 0 0 0 0 rgba(225,29,72,.5);} 50% { box-shadow: 0 0 0 10px rgba(225,29,72,0);} }
+    .warn-pulse { animation: pulseWarn 1.4s ease-in-out 3; }
+    .opt-btn.correct { border-color: #059669 !important; background: #ecfdf5 !important; }
+    .opt-btn.wrong { border-color: #e11d48 !important; background: #fff1f2 !important; }
+    .opt-btn:disabled { cursor: default; }
+    .toast-in { animation: toastIn .25s ease-out; }
+    @keyframes toastIn { from { opacity: 0; transform: translateY(10px);} to { opacity: 1; transform: none; } }
+    .bar-track { background: #e2e8f0; border-radius: 999px; height: 10px; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 999px; }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col bg-gradient-to-br from-indigo-50/60 via-slate-50 to-teal-50/60">
+
+  <canvas id="petal-canvas" class="fixed inset-0 pointer-events-none w-full h-full" style="z-index:90"></canvas>
+  <div id="toast-host" class="fixed bottom-4 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 w-[92%] max-w-md pointer-events-none" style="z-index:95"></div>
+
+  <!-- 通用確認對話框（取代 confirm，協作平台嵌入時也能用） -->
+  <div id="confirm-modal" class="fixed inset-0 bg-slate-900/70 backdrop-blur-sm hidden items-center justify-center p-4" style="z-index:80">
+    <div class="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4">
+      <p id="confirm-text" class="font-bold text-slate-800 leading-relaxed"></p>
+      <div class="flex gap-3 justify-end">
+        <button id="confirm-no" class="touch-target px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 font-bold text-sm">取消</button>
+        <button id="confirm-yes" class="touch-target px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-sm">確定</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 學生登入 ==================== -->
+  <div id="student-login-modal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm hidden items-center justify-center p-4" style="z-index:70">
+    <div class="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-slate-200 space-y-5">
+      <div class="flex items-center gap-3">
+        <div class="w-12 h-12 rounded-2xl bg-indigo-600 text-white font-black text-xl flex items-center justify-center shadow-md">$p^n$</div>
+        <div>
+          <span id="login-sync-tag" class="text-xs font-bold text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-full">學習紀錄</span>
+          <h2 class="text-xl font-black text-slate-800 mt-0.5">請輸入你的班級、座號與姓名</h2>
+        </div>
+      </div>
+      <p id="login-desc" class="text-xs sm:text-sm text-slate-600 leading-relaxed"></p>
+      <div class="space-y-3">
+        <div>
+          <label for="login-class" class="block text-xs font-bold text-slate-700 mb-1">班級</label>
+          <input type="text" id="login-class" inputmode="numeric" maxlength="10" placeholder="例如：701" class="touch-target w-full px-4 py-2.5 rounded-xl border-2 border-slate-200 font-bold text-slate-800 focus:outline-none focus:border-indigo-500">
+        </div>
+        <div class="grid grid-cols-3 gap-3">
+          <div>
+            <label for="login-seat" class="block text-xs font-bold text-slate-700 mb-1">座號</label>
+            <input type="number" id="login-seat" min="1" max="60" placeholder="1" class="touch-target w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 font-bold text-slate-800 focus:outline-none focus:border-indigo-500">
+          </div>
+          <div class="col-span-2">
+            <label for="login-name" class="block text-xs font-bold text-slate-700 mb-1">姓名</label>
+            <input type="text" id="login-name" maxlength="20" placeholder="你的姓名" class="touch-target w-full px-4 py-2.5 rounded-xl border-2 border-slate-200 font-bold text-slate-800 focus:outline-none focus:border-indigo-500">
+          </div>
+        </div>
+        <p id="login-error-msg" class="text-xs font-bold text-rose-600 hidden">⚠️ 請完整填寫班級、座號與姓名才能開始。</p>
+      </div>
+      <button onclick="confirmStudentIdentity()" class="touch-target w-full py-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-base shadow-lg shadow-indigo-200 transition">🚀 開始學習</button>
+    </div>
+  </div>
+
+  <!-- ==================== 頂部導覽列（學生） ==================== -->
+  <header id="student-header" class="lg:sticky top-0 z-40 bg-white/95 backdrop-blur-md shadow-sm border-b border-slate-200/80 hidden">
+    <div class="max-w-7xl mx-auto px-3 sm:px-6 py-3">
+      <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+        <div class="flex items-center justify-between gap-3">
+          <div class="flex items-center gap-3 min-w-0">
+            <div class="w-11 h-11 shrink-0 rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center text-white shadow-md shadow-indigo-200 font-black text-xl">$p^n$</div>
+            <div class="min-w-0">
+              <div class="flex flex-wrap items-center gap-1.5">
+                <span id="student-identity-pill" class="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 rounded-full">👤</span>
+                <button onclick="logoutStudent()" class="text-xs font-bold text-slate-500 hover:text-rose-600 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-full transition" title="換下一位同學使用這台裝置">換人</button>
+                <span id="cloud-sync-indicator" class="text-xs font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1 border"></span>
+              </div>
+              <h1 class="text-base sm:text-lg font-black text-slate-800 tracking-tight">質因數分解互動學習網</h1>
+            </div>
+          </div>
+          <button onclick="toggleSound()" class="lg:hidden touch-target px-3 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold text-xs"><span class="sound-icon">🔊</span></button>
+        </div>
+        <nav class="flex flex-wrap items-center gap-2" id="tab-nav">
+          <button onclick="switchTab('tab-diag')" data-tab="tab-diag" class="tab-btn touch-target px-3.5 py-2 rounded-xl font-black text-xs sm:text-sm transition">0️⃣ 前測</button>
+          <button onclick="switchTab('tab-mod1')" data-tab="tab-mod1" class="tab-btn touch-target px-3.5 py-2 rounded-xl font-black text-xs sm:text-sm transition">1️⃣ 因數與倍數</button>
+          <button onclick="switchTab('tab-mod2')" data-tab="tab-mod2" class="tab-btn touch-target px-3.5 py-2 rounded-xl font-black text-xs sm:text-sm transition">2️⃣ 質數與篩法</button>
+          <button onclick="switchTab('tab-mod3')" data-tab="tab-mod3" class="tab-btn touch-target px-3.5 py-2 rounded-xl font-black text-xs sm:text-sm transition">3️⃣ 分解工作台</button>
+          <button onclick="switchTab('tab-mod4')" data-tab="tab-mod4" class="tab-btn touch-target px-3.5 py-2 rounded-xl font-black text-xs sm:text-sm transition">🔥 4️⃣ 闖關</button>
+          <button onclick="toggleSound()" class="hidden lg:flex touch-target px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs items-center gap-1 transition"><span class="sound-icon">🔊</span><span id="sound-text">音效</span></button>
+        </nav>
+      </div>
+    </div>
+  </header>
+
+  <main id="student-main" class="flex-grow max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 hidden">
+
+    <!-- ==================== 0 前測 ==================== -->
+    <section id="tab-diag" class="tab-section space-y-6">
+      <div class="bg-gradient-to-r from-amber-500 to-orange-600 rounded-3xl p-6 sm:p-8 text-white shadow-xl">
+        <div class="max-w-3xl mx-auto space-y-3">
+          <span class="inline-block px-3 py-1 rounded-full bg-white/20 font-black text-xs">🚀 先測一下你會多少</span>
+          <h2 class="text-2xl sm:text-3xl font-black">已經學過因數、質數與標準分解式了嗎？</h2>
+          <p class="text-amber-50 text-sm sm:text-base leading-relaxed">
+            3 題全對，可以直接去<strong>闖關</strong>；有答錯也沒關係，系統會告訴你該先看哪一個模組。前測結果只是幫你選路線，不會扣分。
+          </p>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-slate-200/80 max-w-3xl mx-auto space-y-6">
+        <div class="bg-slate-50 p-5 rounded-2xl border border-slate-200 space-y-3">
+          <div class="font-bold text-sm sm:text-base text-slate-800">
+            <span class="w-6 h-6 rounded-lg bg-indigo-600 text-white inline-flex items-center justify-center text-xs mr-2">1</span>
+            不做除法，判斷 $528$ 是不是 $3$ 的倍數。下列哪一個<strong>理由</strong>正確？
+          </div>
+          <div class="space-y-2">
+            <label class="flex items-center gap-3 p-3 rounded-xl bg-white border-2 border-slate-200 hover:border-indigo-400 cursor-pointer font-bold text-sm text-slate-700"><input type="radio" name="diag-q1" value="A" class="w-4 h-4"> A. 不是，因為個位數 $8$ 不是 $3$ 的倍數</label>
+            <label class="flex items-center gap-3 p-3 rounded-xl bg-white border-2 border-slate-200 hover:border-indigo-400 cursor-pointer font-bold text-sm text-slate-700"><input type="radio" name="diag-q1" value="B" class="w-4 h-4"> B. 是，因為各位數字和 $5+2+8=15$ 是 $3$ 的倍數</label>
+            <label class="flex items-center gap-3 p-3 rounded-xl bg-white border-2 border-slate-200 hover:border-indigo-400 cursor-pointer font-bold text-sm text-slate-700"><input type="radio" name="diag-q1" value="C" class="w-4 h-4"> C. 是，因為末兩位 $28$ 是 $4$ 的倍數</label>
+          </div>
+        </div>
+
+        <div class="bg-slate-50 p-5 rounded-2xl border border-slate-200 space-y-3">
+          <div class="font-bold text-sm sm:text-base text-slate-800">
+            <span class="w-6 h-6 rounded-lg bg-indigo-600 text-white inline-flex items-center justify-center text-xs mr-2">2</span>
+            下列關於質數與合數的敘述，哪一個正確？
+          </div>
+          <div class="space-y-2">
+            <label class="flex items-center gap-3 p-3 rounded-xl bg-white border-2 border-slate-200 hover:border-indigo-400 cursor-pointer font-bold text-sm text-slate-700"><input type="radio" name="diag-q2" value="A" class="w-4 h-4"> A. $1$ 是最小的質數</label>
+            <label class="flex items-center gap-3 p-3 rounded-xl bg-white border-2 border-slate-200 hover:border-indigo-400 cursor-pointer font-bold text-sm text-slate-700"><input type="radio" name="diag-q2" value="B" class="w-4 h-4"> B. $2$ 是唯一的偶質數</label>
+            <label class="flex items-center gap-3 p-3 rounded-xl bg-white border-2 border-slate-200 hover:border-indigo-400 cursor-pointer font-bold text-sm text-slate-700"><input type="radio" name="diag-q2" value="C" class="w-4 h-4"> C. 所有奇數都是質數</label>
+          </div>
+        </div>
+
+        <div class="bg-slate-50 p-5 rounded-2xl border border-slate-200 space-y-4">
+          <div class="font-bold text-sm sm:text-base text-slate-800">
+            <span class="w-6 h-6 rounded-lg bg-indigo-600 text-white inline-flex items-center justify-center text-xs mr-2">3</span>
+            把 $180$ 做質因數分解，寫成標準分解式，並求它的<strong>相異質因數之和</strong>。
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div class="bg-white p-4 rounded-xl border-2 border-slate-200 space-y-2">
+              <label for="diag-q3-form" class="block text-xs font-bold text-indigo-700">(1) 180 的標準分解式</label>
+              <select id="diag-q3-form" class="touch-target w-full px-3 py-2 rounded-xl border-2 border-slate-200 font-bold text-sm bg-white focus:outline-none focus:border-indigo-500">
+                <option value="">請選擇</option>
+                <option value="w1">2 × 2 × 3 × 3 × 5</option>
+                <option value="ok">2² × 3² × 5</option>
+                <option value="w2">2² × 9 × 5</option>
+                <option value="w3">2³ × 3 × 5²</option>
+              </select>
+            </div>
+            <div class="bg-white p-4 rounded-xl border-2 border-slate-200 space-y-2">
+              <label for="diag-q3-sum" class="block text-xs font-bold text-indigo-700">(2) 相異質因數之和</label>
+              <input type="number" id="diag-q3-sum" placeholder="輸入數字" class="touch-target w-full px-3 py-2 rounded-xl border-2 border-slate-200 font-bold text-sm bg-white focus:outline-none focus:border-indigo-500">
+            </div>
+          </div>
+        </div>
+
+        <div id="diag-result" class="hidden rounded-2xl p-5 border-2 space-y-3"></div>
+
+        <div class="flex flex-col sm:flex-row gap-3">
+          <button onclick="submitDiagnosticTest()" class="touch-target flex-grow py-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-base shadow-lg shadow-indigo-200 transition">📨 送出前測</button>
+          <button onclick="switchTab('tab-mod1')" class="touch-target px-6 py-3.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm transition">📖 跳過前測，從頭學 ➜</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== 1 因數與倍數 ==================== -->
+    <section id="tab-mod1" class="tab-section hidden space-y-8">
+      <div class="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-slate-200/80 space-y-6">
+        <div>
+          <span class="inline-block px-3 py-1 rounded-full bg-blue-100 text-blue-800 font-bold text-xs mb-2">重點一・因數與倍數</span>
+          <h2 class="text-2xl sm:text-3xl font-black text-slate-800">什麼是「因數」與「倍數」？</h2>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div class="rounded-2xl bg-gradient-to-br from-blue-50/80 to-indigo-50/80 border-2 border-blue-200 p-6 space-y-4">
+            <h3 class="text-xl font-black text-blue-950">整除與乘法算式</h3>
+            <p class="text-slate-700 text-sm leading-relaxed">當正整數 $a \div b$ 沒有餘數（整除），就可以改寫成乘法算式：</p>
+            <div class="bg-white rounded-xl p-4 text-center border border-blue-200 text-lg font-bold text-indigo-700">$a = b \times c$</div>
+            <ul class="space-y-2 text-sm text-slate-700 font-medium">
+              <li>✔️ <strong>因數：</strong>$b$ 與 $c$ 都是 $a$ 的因數。</li>
+              <li>✔️ <strong>倍數：</strong>$a$ 是 $b$ 的倍數，也是 $c$ 的倍數。</li>
+            </ul>
+          </div>
+          <div class="rounded-2xl bg-gradient-to-br from-emerald-50/80 to-teal-50/80 border-2 border-emerald-200 p-6 space-y-4">
+            <h3 class="text-xl font-black text-emerald-950">實例：$12$ 的因數</h3>
+            <p class="text-slate-700 text-sm leading-relaxed">把 $12$ 顆蘋果排成長方形，有幾種排法？</p>
+            <div class="flex flex-wrap gap-2">
+              <span class="px-3 py-1.5 rounded-lg bg-white border border-emerald-300 font-bold text-sm">$12 = 1 \times 12$</span>
+              <span class="px-3 py-1.5 rounded-lg bg-white border border-emerald-300 font-bold text-sm">$12 = 2 \times 6$</span>
+              <span class="px-3 py-1.5 rounded-lg bg-white border border-emerald-300 font-bold text-sm">$12 = 3 \times 4$</span>
+            </div>
+            <div class="bg-white/90 rounded-xl p-4 border border-emerald-200 space-y-1.5 text-sm text-slate-700 font-medium">
+              <p>📌 $12$ 的正因數：$1, 2, 3, 4, 6, 12$（共 $6$ 個），而且是<strong>兩兩成對</strong>出現的。</p>
+              <p>📌 任何正整數 $N$，最小的正因數是 $1$，最大的是 $N$ 本身。</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-slate-200/80 space-y-6">
+        <div>
+          <span class="inline-block px-3 py-1 rounded-full bg-amber-100 text-amber-800 font-bold text-xs mb-2">不用除法也能判斷</span>
+          <h2 class="text-2xl sm:text-3xl font-black text-slate-800">$2, 3, 4, 5, 9, 11$ 的倍數判別法</h2>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div class="rounded-2xl border border-slate-200 p-5 bg-gradient-to-b from-white to-slate-50/70 space-y-3">
+            <div class="flex items-center justify-between"><span class="px-3 py-1 rounded-xl bg-blue-600 text-white font-black">$2$ 的倍數</span><span class="text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg">看個位</span></div>
+            <p class="text-slate-700 font-medium text-sm">個位數字是 $0, 2, 4, 6, 8$。</p>
+            <div class="bg-blue-50/70 rounded-xl p-3 border border-blue-100 text-xs text-slate-700">例：$528$ 個位是 $8$ → 是 $2$ 的倍數。</div>
+          </div>
+          <div class="rounded-2xl border border-slate-200 p-5 bg-gradient-to-b from-white to-slate-50/70 space-y-3">
+            <div class="flex items-center justify-between"><span class="px-3 py-1 rounded-xl bg-emerald-600 text-white font-black">$5$ 的倍數</span><span class="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg">看個位</span></div>
+            <p class="text-slate-700 font-medium text-sm">個位數字是 $0$ 或 $5$。</p>
+            <div class="bg-emerald-50/70 rounded-xl p-3 border border-emerald-100 text-xs text-slate-700">例：$735$ 個位是 $5$ → 是 $5$ 的倍數。</div>
+          </div>
+          <div class="rounded-2xl border border-slate-200 p-5 bg-gradient-to-b from-white to-slate-50/70 space-y-3">
+            <div class="flex items-center justify-between"><span class="px-3 py-1 rounded-xl bg-cyan-600 text-white font-black">$4$ 的倍數</span><span class="text-xs font-bold text-cyan-700 bg-cyan-50 px-2.5 py-1 rounded-lg">看末兩位</span></div>
+            <p class="text-slate-700 font-medium text-sm">末兩位是 $4$ 的倍數（或 $00$）。</p>
+            <div class="bg-cyan-50/70 rounded-xl p-3 border border-cyan-100 text-xs text-slate-700">例：$1528$ 末兩位 $28 = 4 \times 7$ → 是 $4$ 的倍數。</div>
+          </div>
+          <div class="rounded-2xl border border-slate-200 p-5 bg-gradient-to-b from-white to-slate-50/70 space-y-3">
+            <div class="flex items-center justify-between"><span class="px-3 py-1 rounded-xl bg-amber-500 text-white font-black">$3$ 的倍數</span><span class="text-xs font-bold text-amber-800 bg-amber-50 px-2.5 py-1 rounded-lg">數字和</span></div>
+            <p class="text-slate-700 font-medium text-sm">各位數字的和是 $3$ 的倍數。</p>
+            <div class="bg-amber-50/70 rounded-xl p-3 border border-amber-100 text-xs text-slate-700">例：$528 \to 5+2+8=15$ → 是 $3$ 的倍數。</div>
+          </div>
+          <div class="rounded-2xl border border-slate-200 p-5 bg-gradient-to-b from-white to-slate-50/70 space-y-3">
+            <div class="flex items-center justify-between"><span class="px-3 py-1 rounded-xl bg-orange-600 text-white font-black">$9$ 的倍數</span><span class="text-xs font-bold text-orange-800 bg-orange-50 px-2.5 py-1 rounded-lg">數字和</span></div>
+            <p class="text-slate-700 font-medium text-sm">各位數字的和是 $9$ 的倍數。</p>
+            <div class="bg-orange-50/70 rounded-xl p-3 border border-orange-100 text-xs text-slate-700">例：$468 \to 4+6+8=18$ → 是 $9$ 的倍數。</div>
+          </div>
+          <div class="rounded-2xl border border-slate-200 p-5 bg-gradient-to-b from-white to-slate-50/70 space-y-3">
+            <div class="flex items-center justify-between"><span class="px-3 py-1 rounded-xl bg-rose-600 text-white font-black">$11$ 的倍數</span><span class="text-xs font-bold text-rose-700 bg-rose-50 px-2.5 py-1 rounded-lg">奇偶位差</span></div>
+            <p class="text-slate-700 font-medium text-sm">從個位起，奇數位數字和與偶數位數字和的差是 $0$ 或 $11$ 的倍數。</p>
+            <div class="bg-rose-50/70 rounded-xl p-3 border border-rose-100 text-xs text-slate-700">例：$528 \to (8+5)-2=11$ → 是 $11$ 的倍數。</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 正因數探索器 -->
+      <div class="bg-gradient-to-r from-indigo-600 to-violet-700 rounded-3xl p-6 sm:p-8 text-white shadow-lg">
+        <div class="max-w-3xl mx-auto">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <h2 class="text-xl sm:text-2xl font-black">🧮 正因數探索器</h2>
+            <span id="mod1-task-badge" class="px-3 py-1 rounded-full bg-white/20 text-xs font-bold">探索任務：查 3 個不同的數（0/3）</span>
+          </div>
+          <p class="text-indigo-100 text-sm sm:text-base mb-4">輸入 $1 \sim 500$ 的正整數，看看它的因數怎麼「成對」出現。</p>
+          <div class="flex flex-col sm:flex-row gap-3 mb-3">
+            <input type="number" id="factor-input" min="1" max="500" value="36" class="touch-target flex-grow px-4 py-3 rounded-xl text-slate-900 font-bold text-lg focus:outline-none focus:ring-4 focus:ring-amber-300" onkeydown="if(event.key==='Enter')findAllFactors(true)">
+            <button onclick="findAllFactors(true)" class="touch-target px-6 py-3 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-900 font-black shadow-md transition">🔍 找出正因數</button>
+          </div>
+          <div class="flex flex-wrap items-center gap-2 mb-5 text-xs sm:text-sm">
+            <span class="text-indigo-200 font-medium">試試看：</span>
+            <button onclick="quickFactorTest(24)" class="px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 font-bold">24</button>
+            <button onclick="quickFactorTest(36)" class="px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 font-bold">36</button>
+            <button onclick="quickFactorTest(53)" class="px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 font-bold">53</button>
+            <button onclick="quickFactorTest(100)" class="px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 font-bold">100</button>
+            <button onclick="quickFactorTest(97)" class="px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 font-bold">97</button>
+          </div>
+          <div id="factor-result-box" class="bg-white text-slate-800 rounded-2xl p-5 shadow-inner space-y-4"></div>
+          <div class="mt-4 bg-white/10 border border-white/20 rounded-2xl p-4 text-sm leading-relaxed">
+            🤔 <strong>觀察看看：</strong>大部分的數，因數個數都是偶數。哪些數的因數個數是<strong>奇數</strong>？哪些數只有 <strong>2 個</strong>因數？（提示：比較 36、100 和 53、97）
+          </div>
+        </div>
+      </div>
+
+      <!-- 微檢核 1 -->
+      <div class="bg-amber-50/90 rounded-3xl p-6 sm:p-8 border-2 border-amber-300 shadow-sm space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <span class="px-3 py-1 rounded-full bg-amber-500 text-white font-black text-xs">🎯 重點一・微檢核</span>
+          <span id="checkpoint-1-status" class="text-xs font-bold text-amber-800 bg-amber-200/70 px-3 py-1 rounded-full">尚未通過</span>
+        </div>
+        <h3 class="text-lg font-black text-slate-800">不做除法，$7425$ 是下列哪些數的倍數？（複選）</h3>
+        <div class="flex flex-wrap gap-3" id="cp1-options">
+          <label class="touch-target flex items-center gap-2 px-4 py-2 rounded-xl bg-white border-2 border-amber-200 font-bold cursor-pointer"><input type="checkbox" value="2" class="w-4 h-4"> 2</label>
+          <label class="touch-target flex items-center gap-2 px-4 py-2 rounded-xl bg-white border-2 border-amber-200 font-bold cursor-pointer"><input type="checkbox" value="3" class="w-4 h-4"> 3</label>
+          <label class="touch-target flex items-center gap-2 px-4 py-2 rounded-xl bg-white border-2 border-amber-200 font-bold cursor-pointer"><input type="checkbox" value="4" class="w-4 h-4"> 4</label>
+          <label class="touch-target flex items-center gap-2 px-4 py-2 rounded-xl bg-white border-2 border-amber-200 font-bold cursor-pointer"><input type="checkbox" value="5" class="w-4 h-4"> 5</label>
+          <label class="touch-target flex items-center gap-2 px-4 py-2 rounded-xl bg-white border-2 border-amber-200 font-bold cursor-pointer"><input type="checkbox" value="9" class="w-4 h-4"> 9</label>
+          <label class="touch-target flex items-center gap-2 px-4 py-2 rounded-xl bg-white border-2 border-amber-200 font-bold cursor-pointer"><input type="checkbox" value="11" class="w-4 h-4"> 11</label>
+        </div>
+        <button onclick="verifyCheckpoint1()" class="touch-target px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm">送出</button>
+        <div id="cp1-feedback" class="text-sm font-bold"></div>
+      </div>
+    </section>
+
+    <!-- ==================== 2 質數與篩法 ==================== -->
+    <section id="tab-mod2" class="tab-section hidden space-y-8">
+      <div class="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-slate-200/80">
+        <span class="inline-block px-3 py-1 rounded-full bg-violet-100 text-violet-700 font-bold text-xs mb-2">重點二・質數與合數</span>
+        <h2 class="text-2xl sm:text-3xl font-black text-slate-800 mb-6">質數 vs 合數</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+          <div class="rounded-2xl bg-emerald-50/70 border-2 border-emerald-200 p-5 space-y-3">
+            <div class="flex items-center justify-between"><h3 class="text-xl font-black text-emerald-900">🌟 質數</h3><span class="px-2.5 py-1 rounded-lg bg-emerald-600 text-white text-xs font-bold">恰好 2 個正因數</span></div>
+            <p class="text-slate-700 text-sm">大於 $1$ 的正整數，正因數只有 $1$ 和它自己。</p>
+            <div class="bg-white rounded-xl p-3 text-sm text-slate-700 border border-emerald-100">例：$7$、$13$、$53$</div>
+          </div>
+          <div class="rounded-2xl bg-sky-50/70 border-2 border-sky-200 p-5 space-y-3">
+            <div class="flex items-center justify-between"><h3 class="text-xl font-black text-sky-900">🧩 合數</h3><span class="px-2.5 py-1 rounded-lg bg-sky-600 text-white text-xs font-bold">3 個以上正因數</span></div>
+            <p class="text-slate-700 text-sm">大於 $1$ 的正整數，除了 $1$ 和自己，還有其他正因數。</p>
+            <div class="bg-white rounded-xl p-3 text-sm text-slate-700 border border-sky-100">例：$6 = 2 \times 3$、$9 = 3 \times 3$、$51 = 3 \times 17$</div>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="rounded-2xl bg-rose-50 border-2 border-rose-300 p-4 flex items-start gap-3.5">
+            <div class="w-10 h-10 rounded-xl bg-rose-600 text-white font-black text-lg flex items-center justify-center shrink-0">1</div>
+            <div><h4 class="font-black text-rose-900">$1$ 既不是質數，也不是合數</h4><p class="text-rose-800 text-xs sm:text-sm mt-1">$1$ 的正因數只有 $1$ 個。</p></div>
+          </div>
+          <div class="rounded-2xl bg-amber-50 border-2 border-amber-300 p-4 flex items-start gap-3.5">
+            <div class="w-10 h-10 rounded-xl bg-amber-500 text-white font-black text-lg flex items-center justify-center shrink-0">2</div>
+            <div><h4 class="font-black text-amber-900">$2$ 是最小的質數，也是唯一的偶質數</h4><p class="text-amber-800 text-xs sm:text-sm mt-1">但「奇數」不一定是質數，例如 $9$、$51$。</p></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 埃拉托斯特尼篩法 -->
+      <div class="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-slate-200/80 space-y-5">
+        <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+          <div>
+            <span class="inline-block px-3 py-1 rounded-full bg-amber-100 text-amber-800 font-bold text-xs mb-1">📜 數學史・動手做</span>
+            <h2 class="text-2xl font-black text-slate-800">埃拉托斯特尼篩法：自己篩出 $100$ 以內的質數</h2>
+            <p class="text-sm text-slate-600 mt-1 leading-relaxed">古希臘的埃拉托斯特尼（Eratosthenes，約西元前 276–194 年）是亞歷山大圖書館的館長，也曾估算地球的周長。他想到一個不用一個一個試除就能找出質數的方法：<strong>留下最小的數，把它的倍數全部劃掉</strong>。</p>
+          </div>
+          <span id="sieve-progress" class="text-xs font-bold text-indigo-700 bg-indigo-50 px-3 py-1 rounded-full shrink-0">尚未開始</span>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button id="sieve-next-btn" onclick="sieveNext()" class="touch-target px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-sm">▶ 劃掉 1，開始篩</button>
+          <button onclick="sieveReset()" class="touch-target px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm">↺ 重來</button>
+        </div>
+        <div id="sieve-msg" class="text-sm font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl p-3">按下按鈕，一步一步篩。</div>
+        <div id="sieve-grid" class="grid grid-cols-10 gap-1 sm:gap-1.5 max-w-xl mx-auto"></div>
+        <div id="sieve-question" class="hidden rounded-2xl bg-violet-50 border-2 border-violet-200 p-5 space-y-3">
+          <p class="font-black text-violet-900">🤔 篩完 $7$ 就停了。那 $11$ 的倍數（$22, 33, 44, \dots, 99$）還需要再篩一次嗎？為什麼？</p>
+          <p class="text-sm text-violet-800">先想一想，再按下面的按鈕對答案。</p>
+          <button onclick="sieveReveal()" class="touch-target px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-bold text-sm">看解釋</button>
+          <div id="sieve-answer" class="hidden text-sm text-slate-700 leading-relaxed bg-white rounded-xl p-4 border border-violet-200"></div>
+        </div>
+      </div>
+
+      <!-- 標準分解式 -->
+      <div class="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-slate-200/80 space-y-5">
+        <div>
+          <span class="inline-block px-3 py-1 rounded-full bg-indigo-100 text-indigo-700 font-bold text-xs mb-2">標準分解式</span>
+          <h2 class="text-2xl sm:text-3xl font-black text-slate-800">質因數與標準分解式</h2>
+        </div>
+        <div class="bg-indigo-50/70 rounded-2xl p-5 border border-indigo-100 space-y-2 text-sm sm:text-base text-slate-700 leading-relaxed">
+          <p>🔹 <strong>質因數：</strong>既是因數、又是質數的數。例如 $12$ 的因數中，$2$ 和 $3$ 是質因數。</p>
+          <p>🔹 <strong>質因數分解：</strong>把一個合數寫成質因數的乘積，例如 $72 = 2 \times 2 \times 2 \times 3 \times 3$。</p>
+          <p>🔹 <strong>標準分解式：</strong>相同的質因數寫成次方，底數由小到大排列：$72 = 2^3 \times 3^2$。</p>
+        </div>
+        <div class="rounded-2xl bg-amber-50 border border-amber-200 p-4 text-sm text-slate-700 leading-relaxed">
+          📜 <strong>為什麼可以叫「標準」？</strong>不管你先用哪個質數去除，最後得到的質因數（不計順序）都一樣——每個大於 $1$ 的正整數，質因數分解的方式只有一種。這個事實叫做<strong>算術基本定理</strong>，高斯在 1801 年的《算術研究》中首次完整地敘述並證明它。
+        </div>
+      </div>
+
+      <!-- 微檢核 2 -->
+      <div class="bg-amber-50/90 rounded-3xl p-6 sm:p-8 border-2 border-amber-300 shadow-sm space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <span class="px-3 py-1 rounded-full bg-amber-500 text-white font-black text-xs">🎯 重點二・微檢核</span>
+          <span id="checkpoint-2-status" class="text-xs font-bold text-amber-800 bg-amber-200/70 px-3 py-1 rounded-full">尚未通過</span>
+        </div>
+        <h3 class="text-lg font-black text-slate-800">小華說：「$51$ 是奇數，又不是 $5$ 的倍數，所以 $51$ 是質數。」他說得對嗎？</h3>
+        <div id="cp2-options" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+        <div id="cp2-feedback" class="text-sm font-bold"></div>
+      </div>
+    </section>
+
+    <!-- ==================== 3 分解工作台與範例 ==================== -->
+    <section id="tab-mod3" class="tab-section hidden space-y-8">
+
+      <!-- 短除法工作台 -->
+      <div class="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border-2 border-indigo-200 space-y-5">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div>
+            <span class="inline-block px-3 py-1 rounded-full bg-indigo-100 text-indigo-700 font-bold text-xs mb-1">重點三・自己動手分解</span>
+            <h2 class="text-2xl sm:text-3xl font-black text-slate-800">🛠️ 短除法工作台</h2>
+            <p class="text-sm text-slate-600 mt-1">每一步自己決定要用哪個數去除，最後寫出標準分解式。</p>
+          </div>
+          <span id="wb-count-badge" class="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-full shrink-0">已完成 0 題</span>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <button onclick="wbNewNumber()" class="touch-target px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm">🎲 換一個數</button>
+          <span class="text-xs text-slate-500 font-bold">或自己出題：</span>
+          <input type="number" id="wb-custom" min="4" max="1000" placeholder="4～1000" class="touch-target w-28 px-3 py-2 rounded-xl border-2 border-slate-200 font-bold text-sm focus:outline-none focus:border-indigo-500">
+          <button onclick="wbCustom()" class="touch-target px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 font-bold text-sm">開始</button>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+          <div class="bg-slate-50 rounded-2xl p-5 border border-slate-200 min-h-[220px] flex flex-col items-center justify-center">
+            <div id="wb-table"></div>
+          </div>
+          <div class="space-y-4">
+            <div id="wb-phase1" class="space-y-3">
+              <p class="text-sm font-bold text-slate-700">① 選一個數去除目前的商：</p>
+              <div class="flex flex-wrap gap-2" id="wb-divisor-btns"></div>
+              <div class="flex gap-2">
+                <input type="number" id="wb-divisor-input" min="2" placeholder="其他除數" class="touch-target w-32 px-3 py-2 rounded-xl border-2 border-slate-200 font-bold text-sm focus:outline-none focus:border-indigo-500" onkeydown="if(event.key==='Enter')wbDivideInput()">
+                <button onclick="wbDivideInput()" class="touch-target px-4 py-2 rounded-xl bg-slate-800 text-white font-bold text-sm">除除看</button>
+                <button onclick="wbUndo()" class="touch-target px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 font-bold text-sm">↶ 上一步</button>
+              </div>
+            </div>
+            <div id="wb-phase2" class="hidden space-y-3">
+              <p class="text-sm font-bold text-slate-700">② 寫出 <span id="wb-n-label"></span> 的標準分解式：</p>
+              <div class="flex flex-wrap gap-2">
+                <input type="text" id="wb-form-input" autocomplete="off" placeholder="例如 2^3×5" class="touch-target flex-grow min-w-[10rem] px-3 py-2 rounded-xl border-2 border-slate-200 font-bold focus:outline-none focus:border-indigo-500" oninput="wbPreview()" onkeydown="if(event.key==='Enter')wbCheckForm()">
+                <button onclick="wbInsert('×')" class="touch-target px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 font-black">×</button>
+                <button onclick="wbInsert('^')" class="touch-target px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 font-black">^</button>
+                <button onclick="wbCheckForm()" class="touch-target px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm">檢查</button>
+              </div>
+              <div class="text-xs text-slate-500">用 ^ 表示次方：2^3 代表 $2^3$。預覽：<span id="wb-preview" class="text-base text-slate-800"></span></div>
+            </div>
+            <div id="wb-feedback" class="text-sm font-bold leading-relaxed"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 範例 -->
+      <div class="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-slate-200/80">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-5 border-b border-slate-100">
+          <div>
+            <span class="inline-block px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 font-bold text-xs mb-2">經典題型・一步一步想</span>
+            <h2 class="text-2xl sm:text-3xl font-black text-slate-800">四大題型範例</h2>
+            <p class="text-sm text-slate-500 mt-1">建議先自己想下一步，再按「下一步」對照。</p>
+          </div>
+          <div id="mod3-read-progress" class="text-xs sm:text-sm text-indigo-800 bg-indigo-50 px-4 py-2.5 rounded-xl border border-indigo-200 font-bold">📖 已看完 0 / 4 題</div>
+        </div>
+        <div class="space-y-8" id="examples-host"></div>
+      </div>
+
+      <!-- 微檢核 3 -->
+      <div class="bg-amber-50/90 rounded-3xl p-6 sm:p-8 border-2 border-amber-300 shadow-sm space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <span class="px-3 py-1 rounded-full bg-amber-500 text-white font-black text-xs">🎯 重點三・微檢核</span>
+          <span id="checkpoint-3-status" class="text-xs font-bold text-amber-800 bg-amber-200/70 px-3 py-1 rounded-full">尚未通過</span>
+        </div>
+        <h3 class="text-lg font-black text-slate-800">已知 $N = 2^3 \times 3 \times 7$，下列哪一個數<u>不是</u> $N$ 的因數？</h3>
+        <div id="cp3-options" class="grid grid-cols-2 sm:grid-cols-4 gap-3"></div>
+        <div id="cp3-feedback" class="text-sm font-bold"></div>
+      </div>
+
+      <!-- 指數律 -->
+      <div class="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl">
+        <div class="mb-6">
+          <span class="px-3 py-1 rounded-full bg-amber-400 text-slate-950 font-black text-xs">✨ 次方的寫法不熟？先看這裡</span>
+          <h2 class="text-2xl font-black mt-2">指數律線上課程</h2>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <a href="https://www.junyiacademy.org/topics/teacherpreneur-001-7a-08" target="_blank" rel="noopener noreferrer" class="touch-target bg-white/10 hover:bg-white/20 border border-white/15 rounded-2xl p-5 transition flex items-start gap-4"><div class="w-12 h-12 rounded-2xl bg-emerald-500 flex items-center justify-center text-2xl shrink-0">🏫</div><div><span class="text-xs font-bold text-emerald-300">均一教育平台</span><h3 class="font-bold mt-1">指數律完整主題專區</h3></div></a>
+          <a href="https://www.youtube.com/watch?v=50HLgBEGGt8" target="_blank" rel="noopener noreferrer" class="touch-target bg-white/10 hover:bg-white/20 border border-white/15 rounded-2xl p-5 transition flex items-start gap-4"><div class="w-12 h-12 rounded-2xl bg-rose-600 flex items-center justify-center text-2xl shrink-0">▶️</div><div><span class="text-xs font-bold text-rose-300">均一 YouTube</span><h3 class="font-bold mt-1">指數律 1：同底指數相乘與相除</h3></div></a>
+          <a href="https://www.youtube.com/watch?v=FcdI_cbWEDE" target="_blank" rel="noopener noreferrer" class="touch-target bg-white/10 hover:bg-white/20 border border-white/15 rounded-2xl p-5 transition flex items-start gap-4"><div class="w-12 h-12 rounded-2xl bg-sky-500 flex items-center justify-center text-2xl shrink-0">🎬</div><div><span class="text-xs font-bold text-sky-300">臺北酷課雲</span><h3 class="font-bold mt-1">國中數學：指數律核心觀念</h3></div></a>
+          <a href="https://www.youtube.com/watch?v=UdROW9PkWnY" target="_blank" rel="noopener noreferrer" class="touch-target bg-white/10 hover:bg-white/20 border border-white/15 rounded-2xl p-5 transition flex items-start gap-4"><div class="w-12 h-12 rounded-2xl bg-amber-500 flex items-center justify-center text-2xl shrink-0">🚑</div><div><span class="text-xs font-bold text-amber-300">數學急救包</span><h3 class="font-bold mt-1">國一上：指數律與科學記號</h3></div></a>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== 4 闖關 ==================== -->
+    <section id="tab-mod4" class="tab-section hidden space-y-6">
+      <div class="bg-white rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-200/80 space-y-4">
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div>
+            <span class="px-3 py-1 rounded-full bg-rose-100 text-rose-700 font-bold text-xs">每題數字都是隨機產生的</span>
+            <h2 class="text-2xl font-black text-slate-800 mt-1">質因數分解闖關</h2>
+          </div>
+          <div class="flex flex-wrap items-center gap-3">
+            <div class="bg-emerald-50 border border-emerald-200 px-3.5 py-2 rounded-2xl text-center min-w-[84px]"><div class="text-[11px] font-bold text-emerald-700">有效答對</div><div id="quiz-score" class="text-2xl font-black text-emerald-600">0</div></div>
+            <div class="bg-amber-50 border border-amber-200 px-3.5 py-2 rounded-2xl text-center min-w-[84px]"><div class="text-[11px] font-bold text-amber-800">連續答對 🔥</div><div id="quiz-streak" class="text-2xl font-black text-amber-600">0</div></div>
+            <div class="bg-slate-50 border border-slate-200 px-3.5 py-2 rounded-2xl text-center min-w-[84px]"><div class="text-[11px] font-bold text-slate-600">正確率</div><div id="quiz-acc" class="text-2xl font-black text-slate-700">–</div></div>
+          </div>
+        </div>
+        <div class="rounded-2xl bg-indigo-50 border border-indigo-200 p-4 space-y-2">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <span class="text-sm font-black text-indigo-900">🏆 精熟目標</span>
+            <span id="mastery-badge" class="text-xs font-bold px-2.5 py-1 rounded-full bg-white border border-indigo-200 text-indigo-700">挑戰中</span>
+          </div>
+          <div id="mastery-list" class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs font-bold"></div>
+        </div>
+      </div>
+
+      <div id="rapid-guess-alert" class="hidden rounded-2xl bg-rose-600 text-white p-4 shadow-lg flex items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+          <span class="text-2xl">🐢</span>
+          <div class="text-xs sm:text-sm"><strong class="text-base block">答得太快了！</strong>這題不到 <span class="rapid-sec"></span> 秒就作答，就算答對也不算「有效答對」。慢慢算，答對才有意義。</div>
+        </div>
+        <button onclick="this.parentElement.classList.add('hidden')" class="px-3 py-1.5 rounded-lg bg-white/20 text-xs font-bold shrink-0">知道了</button>
+      </div>
+
+      <div class="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-slate-200/80 space-y-6">
+        <div class="flex flex-wrap items-center justify-between border-b border-slate-100 pb-4 gap-2">
+          <span id="quiz-type-badge" class="px-3.5 py-1 rounded-full bg-indigo-100 text-indigo-800 font-bold text-xs">題型</span>
+          <div class="flex items-center gap-3">
+            <span id="quiz-timer-display" class="text-xs font-bold text-slate-600 bg-slate-100 px-3 py-1 rounded-full">⏱️ 0.0 秒</span>
+            <span id="quiz-qnum-label" class="text-xs font-bold text-slate-400">第 1 題</span>
+          </div>
+        </div>
+        <div id="quiz-question-stem" class="text-lg sm:text-2xl font-bold text-slate-800 leading-relaxed"></div>
+        <div id="quiz-options-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+        <div id="quiz-feedback-panel" class="hidden rounded-2xl p-5 sm:p-6 border-2 space-y-4">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+              <span id="feedback-emoji" class="text-3xl sm:text-4xl">🎉</span>
+              <div><h3 id="feedback-title" class="text-lg sm:text-xl font-black"></h3><p id="feedback-praise" class="text-sm sm:text-base font-medium mt-0.5"></p></div>
+            </div>
+            <button onclick="generateNewQuestion()" class="touch-target px-5 py-2.5 rounded-xl bg-slate-900 text-white font-bold text-sm shrink-0">下一題 ➜</button>
+          </div>
+          <div id="quiz-explanation-box" class="bg-white/95 rounded-2xl p-5 border border-slate-200 space-y-3 text-slate-800 leading-relaxed"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ==================== 教師戰情室 ==================== -->
+  <main id="teacher-main" class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 hidden">
+    <div id="teacher-auth-gate" class="bg-white rounded-3xl p-6 sm:p-10 shadow-sm border border-slate-200/80 max-w-xl mx-auto text-center space-y-5 my-6">
+      <div class="w-16 h-16 rounded-2xl bg-slate-900 text-amber-400 flex items-center justify-center text-3xl mx-auto shadow-lg">📡</div>
+      <div>
+        <span class="px-3 py-1 rounded-full bg-amber-100 text-amber-900 font-bold text-xs">教師專用</span>
+        <h2 class="text-2xl font-black text-slate-800 mt-2">質因數分解・全班學習戰情室</h2>
+        <p id="teacher-gate-desc" class="text-slate-600 text-xs sm:text-sm mt-2 leading-relaxed">請輸入你在 Code.gs 設定的教師密碼。</p>
+      </div>
+      <div class="flex flex-col sm:flex-row gap-3 justify-center max-w-sm mx-auto">
+        <input type="password" id="teacher-pin-input" placeholder="教師密碼" class="touch-target px-4 py-3 rounded-xl border-2 border-slate-300 font-black text-center text-lg text-slate-800" onkeydown="if(event.key==='Enter')unlockTeacherDashboard()">
+        <button onclick="unlockTeacherDashboard()" class="touch-target px-6 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-sm shadow-md shrink-0">🔓 進入</button>
+      </div>
+      <p id="teacher-pin-error" class="text-xs font-bold text-rose-600 hidden"></p>
+    </div>
+
+    <div id="teacher-dashboard-content" class="hidden space-y-6">
+      <div class="bg-slate-900 text-white rounded-3xl p-6 sm:p-8 shadow-xl space-y-6">
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-700 pb-5">
+          <div>
+            <span id="teacher-refresh-tag" class="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 font-bold text-xs">讀取中…</span>
+            <h2 class="text-2xl sm:text-3xl font-black mt-1">📡 全班學習戰情室</h2>
+          </div>
+          <div class="flex flex-wrap items-center gap-2.5">
+            <select id="class-filter-select" onchange="renderTeacher()" class="touch-target px-3.5 py-2 rounded-xl bg-slate-800 border border-slate-600 text-white font-bold text-xs"><option value="ALL">全部班級</option></select>
+            <label class="flex items-center gap-2 text-xs font-bold text-slate-300 bg-slate-800 border border-slate-600 px-3 py-2 rounded-xl"><input type="checkbox" id="auto-refresh" checked> 每 30 秒更新</label>
+            <button onclick="loadTeacherData()" class="touch-target px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 font-bold text-xs">🔄 立即更新</button>
+            <button onclick="exportClassCsv()" class="touch-target px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 font-bold text-xs">📥 匯出 CSV</button>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
+          <div class="rounded-2xl bg-slate-800 p-4 border border-slate-700"><div class="text-xs text-slate-400 font-bold">學生數</div><div id="stat-total" class="text-2xl font-black mt-1">0</div></div>
+          <div class="rounded-2xl bg-slate-800 p-4 border border-slate-700"><div class="text-xs text-slate-400 font-bold">🟢 目前在線</div><div id="stat-online" class="text-2xl font-black mt-1">0</div></div>
+          <div class="rounded-2xl bg-sky-950/60 p-4 border border-sky-700"><div class="text-xs text-sky-300 font-bold">🚀 前測一次全對</div><div id="stat-pretest" class="text-2xl font-black text-sky-300 mt-1">0</div></div>
+          <div class="rounded-2xl bg-rose-950/60 p-4 border border-rose-700"><div class="text-xs text-rose-300 font-bold">⚠️ 需要關注</div><div id="stat-attention" class="text-2xl font-black text-rose-400 mt-1">0</div></div>
+          <div class="rounded-2xl bg-emerald-950/60 p-4 border border-emerald-700"><div class="text-xs text-emerald-300 font-bold">🏆 已精熟</div><div id="stat-master" class="text-2xl font-black text-emerald-400 mt-1">0</div></div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200/80 space-y-4">
+          <div>
+            <h3 class="text-lg font-black text-slate-800">🧠 全班常見迷思</h3>
+            <p class="text-xs text-slate-500">每條的數字是「出現過這個迷思的學生人數」，括號內是全班累計次數。</p>
+          </div>
+          <div id="class-misc-list" class="space-y-3"></div>
+        </div>
+        <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200/80 space-y-4">
+          <div>
+            <h3 class="text-lg font-black text-slate-800">📊 各題型全班正確率</h3>
+            <p class="text-xs text-slate-500">闖關作答累計（含作答太快的題目）。</p>
+          </div>
+          <div id="class-type-list" class="space-y-3"></div>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-slate-200/80 space-y-4">
+        <h3 class="text-lg font-black text-slate-800">👨‍🎓 全班學生一覽</h3>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs sm:text-sm">
+            <thead>
+              <tr class="border-b-2 border-slate-200 text-slate-600 bg-slate-50">
+                <th class="py-3 px-2 font-bold">學生</th><th class="py-3 px-2 font-bold">狀態</th><th class="py-3 px-2 font-bold">進入方式</th>
+                <th class="py-3 px-2 font-bold">學習(分)</th><th class="py-3 px-2 font-bold">微檢核</th><th class="py-3 px-2 font-bold">工作台</th>
+                <th class="py-3 px-2 font-bold">闖關</th><th class="py-3 px-2 font-bold">太快</th><th class="py-3 px-2 font-bold">提醒</th><th class="py-3 px-2"></th>
+              </tr>
+            </thead>
+            <tbody id="class-roster-tbody" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 學生明細 -->
+    <div id="detail-modal" class="fixed inset-0 bg-slate-900/70 backdrop-blur-sm hidden items-start sm:items-center justify-center p-3 overflow-y-auto" style="z-index:60">
+      <div class="bg-white rounded-3xl max-w-3xl w-full p-6 sm:p-8 shadow-2xl space-y-5 my-6">
+        <div class="flex items-center justify-between">
+          <h3 id="detail-title" class="text-xl font-black text-slate-800"></h3>
+          <button onclick="closeDetail()" class="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 font-bold text-sm">✕ 關閉</button>
+        </div>
+        <div id="detail-body" class="space-y-5 text-sm"></div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="bg-white border-t border-slate-200/80 py-5 mt-12">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between text-xs sm:text-sm text-slate-500 gap-2">
+      <div>📘 國中七年級數學｜質因數分解互動學習網</div>
+      <div id="footer-mode"></div>
+    </div>
+  </footer>
+
+<script>
+/* =====================================================================
+ * 設定區
+ * ===================================================================== */
+// ★ GitHub Pages 版：把 Apps Script「網頁應用程式」網址貼在引號內（結尾是 /exec）。
+//   Google 協作平台版（放在 Apps Script 裡的 Index.html）：這裡留空即可，會自動使用 google.script.run。
+//   兩邊都沒有設定時，網頁仍可正常使用，只是學習紀錄只存在這台裝置。
+const API_URL = '';
+
+const RAPID_SEC = 3;              // 少於幾秒作答視為「太快」
+const MASTERY = { valid: 8, acc: 0.8, types: 4 };
+
+/* ===================================================================== */
+const IS_GAS = typeof google !== 'undefined' && !!(google.script && google.script.run);
+const HAS_API = /^https:\/\/script\.google(usercontent)?\.com\//.test(API_URL);
+const SYNC_ENABLED = IS_GAS || HAS_API;
+const STORAGE_KEY = 'pf_learning_v8';
+const PENDING_KEY = 'pf_pending_v8';
+
+/* ---------- 小工具 ---------- */
+const $ = id => document.getElementById(id);
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+function ri(a, b) { return a + Math.floor(Math.random() * (b - a + 1)); }
+function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+function shuffle(arr) { const a = arr.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+function isPrime(n) { if (n < 2 || n % 1) return false; for (let i = 2; i * i <= n; i++) if (n % i === 0) return false; return true; }
+function factorize(n) { const e = {}; let m = n; for (let p = 2; p * p <= m; p++) while (m % p === 0) { e[p] = (e[p] || 0) + 1; m /= p; } if (m > 1) e[m] = (e[m] || 0) + 1; return e; }
+function primesOf(e) { return Object.keys(e).map(Number).filter(p => e[p] > 0).sort((a, b) => a - b); }
+function termTex(p, k) { return k === 1 ? String(p) : `${p}^{${k}}`; }
+function stdTex(e) { return primesOf(e).map(p => termTex(p, e[p])).join(' \\times '); }
+function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+function lsDel(k) { try { localStorage.removeItem(k); } catch (e) {} }
+function ssGet(k) { try { return sessionStorage.getItem(k); } catch (e) { return null; } }
+function ssSet(k, v) { try { sessionStorage.setItem(k, v); } catch (e) {} }
+function fmtSec(s) { s = Math.round(s || 0); return s >= 60 ? `${Math.floor(s / 60)}分${s % 60}秒` : `${s}秒`; }
+
+function renderMath(els) {
+  if (window.MathJax && typeof window.MathJax.typesetPromise === 'function') {
+    const list = els ? (Array.isArray(els) ? els : [els]) : undefined;
+    if (list && window.MathJax.typesetClear) { try { window.MathJax.typesetClear(list); } catch (e) {} }
+    window.MathJax.typesetPromise(list).catch(() => {});
+  }
+}
+function toast(msg, kind = 'info') {
+  const colors = { info: 'bg-slate-900 text-white', ok: 'bg-emerald-600 text-white', warn: 'bg-amber-500 text-slate-950', err: 'bg-rose-600 text-white' };
+  const el = document.createElement('div');
+  el.className = `toast-in pointer-events-auto px-4 py-3 rounded-2xl shadow-xl font-bold text-sm ${colors[kind] || colors.info}`;
+  el.innerHTML = msg;
+  $('toast-host').appendChild(el);
+  renderMath(el);
+  setTimeout(() => { el.style.transition = 'opacity .4s'; el.style.opacity = '0'; setTimeout(() => el.remove(), 400); }, 3200);
+}
+function confirmDialog(text) {
+  return new Promise(resolve => {
+    $('confirm-text').textContent = text;
+    const m = $('confirm-modal'); m.classList.remove('hidden'); m.classList.add('flex');
+    const done = v => { m.classList.add('hidden'); m.classList.remove('flex'); $('confirm-yes').onclick = $('confirm-no').onclick = null; resolve(v); };
+    $('confirm-yes').onclick = () => done(true);
+    $('confirm-no').onclick = () => done(false);
+  });
+}
+function showModal(id, show) { const m = $(id); m.classList.toggle('hidden', !show); m.classList.toggle('flex', show); }
+
+/* ---------- 音效與花瓣 ---------- */
+let soundEnabled = true, audioCtx = null;
+function tone(freqs, type, gap, dur, vol) {
+  if (!soundEnabled) return;
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const now = audioCtx.currentTime;
+    freqs.forEach((f, i) => {
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.type = type; o.frequency.value = f;
+      g.gain.setValueAtTime(vol, now + i * gap); g.gain.exponentialRampToValueAtTime(0.001, now + i * gap + dur);
+      o.connect(g); g.connect(audioCtx.destination); o.start(now + i * gap); o.stop(now + i * gap + dur);
+    });
+  } catch (e) {}
+}
+const playCheer = () => tone([523.25, 659.25, 783.99, 1046.5], 'triangle', 0.08, 0.3, 0.15);
+const playHint = () => tone([300, 240], 'sine', 0.12, 0.25, 0.1);
+function toggleSound() {
+  soundEnabled = !soundEnabled;
+  document.querySelectorAll('.sound-icon').forEach(e => e.textContent = soundEnabled ? '🔊' : '🔇');
+  const t = $('sound-text'); if (t) t.textContent = soundEnabled ? '音效' : '靜音';
+}
+function triggerPetalRain() {
+  const canvas = $('petal-canvas'), ctx = canvas.getContext('2d');
+  canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+  const petals = Array.from({ length: 45 }, () => ({ x: Math.random() * canvas.width, y: Math.random() * canvas.height - canvas.height, r: Math.random() * 8 + 4, d: Math.random() * 15 + 5, color: pick(['#f472b6', '#fb7185', '#e879f9', '#fbbf24']) }));
+  let angle = 0, frame = 0;
+  (function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height); angle += 0.01;
+    petals.forEach(p => {
+      const tilt = Math.sin(angle - p.d) * 12;
+      p.y += (Math.cos(angle + p.d) + 2 + p.r / 3) * 0.8; p.x += Math.sin(angle) * 1.5;
+      ctx.beginPath(); ctx.lineWidth = p.r / 2; ctx.strokeStyle = p.color;
+      ctx.moveTo(p.x + tilt + p.r / 2, p.y); ctx.lineTo(p.x + tilt, p.y + tilt + p.r / 2); ctx.stroke();
+    });
+    if (++frame < 120) requestAnimationFrame(draw); else ctx.clearRect(0, 0, canvas.width, canvas.height);
+  })();
+}
+
+/* =====================================================================
+ * 學習狀態
+ * ===================================================================== */
+function freshState() {
+  return {
+    v: 8,
+    profile: { classId: '', seatNo: '', name: '' },
+    deviceId: Math.random().toString(36).slice(2, 10),
+    pretest: { attempts: 0, firstPass: false, passed: false, lastWrong: [] },
+    dwell: { 'tab-diag': 0, 'tab-mod1': 0, 'tab-mod2': 0, 'tab-mod3': 0, 'tab-mod4': 0 },
+    cp: { 1: { p: false, a: 0 }, 2: { p: false, a: 0 }, 3: { p: false, a: 0 } },
+    factorNums: [],
+    sieveDone: false,
+    examples: { 1: false, 2: false, 3: false, 4: false },
+    workbench: 0,
+    misc: {},
+    quiz: { attempts: 0, correct: 0, validCorrect: 0, streak: 0, bestStreak: 0, rapid: 0, totalSec: 0, types: {}, logs: [] },
+    activeTab: 'tab-diag'
+  };
+}
+let S = freshState();
+let pending = [];
+
+function loadState() {
+  try {
+    const raw = lsGet(STORAGE_KEY);
+    if (raw) {
+      const p = JSON.parse(raw), f = freshState();
+      S = Object.assign(f, p);
+      ['profile', 'pretest', 'dwell', 'examples', 'quiz'].forEach(k => S[k] = Object.assign(f[k], p[k] || {}));
+      S.cp = Object.assign(freshState().cp, p.cp || {});
+    }
+    pending = JSON.parse(lsGet(PENDING_KEY) || '[]');
+  } catch (e) { S = freshState(); pending = []; }
+}
+let saveTimer = null;
+function saveState(immediate) {
+  if (immediate) { lsSet(STORAGE_KEY, JSON.stringify(S)); return; }
+  clearTimeout(saveTimer); saveTimer = setTimeout(() => lsSet(STORAGE_KEY, JSON.stringify(S)), 400);
+}
+function hasProfile() { return !!(S.profile && S.profile.name && S.profile.classId && S.profile.seatNo); }
+function addMisc(key) { S.misc[key] = (S.misc[key] || 0) + 1; }
+
+function entryLabel() {
+  const p = S.pretest;
+  if (p.firstPass) return '前測一次全對';
+  if (p.passed) return '前測重試後全對';
+  if (p.attempts) return '前測未全對';
+  return '未做前測';
+}
+function readSec() { return S.dwell['tab-mod1'] + S.dwell['tab-mod2'] + S.dwell['tab-mod3']; }
+function quizAcc() { return S.quiz.attempts ? S.quiz.correct / S.quiz.attempts : 0; }
+function typesCorrect() { return Object.values(S.quiz.types).filter(t => t.c > 0).length; }
+function isMastered() { return S.quiz.validCorrect >= MASTERY.valid && quizAcc() >= MASTERY.acc && typesCorrect() >= MASTERY.types; }
+
+function buildSnapshot() {
+  const q = S.quiz;
+  return {
+    v: 8, classId: S.profile.classId, seatNo: S.profile.seatNo, name: S.profile.name, deviceId: S.deviceId,
+    entryLabel: entryLabel(), pretest: S.pretest, dwell: S.dwell, readSec: readSec(),
+    cp: S.cp, cpCount: [1, 2, 3].filter(i => S.cp[i].p).length,
+    factorCount: S.factorNums.length, sieveDone: S.sieveDone,
+    examplesDone: Object.values(S.examples).filter(Boolean).length,
+    workbench: S.workbench, misc: S.misc,
+    quiz: {
+      attempts: q.attempts, correct: q.correct, validCorrect: q.validCorrect, streak: q.streak, bestStreak: q.bestStreak,
+      rapid: q.rapid, avgSec: q.attempts ? Math.round(q.totalSec / q.attempts * 10) / 10 : 0, types: q.types, logs: q.logs.slice(0, 15)
+    },
+    mastered: isMastered(), activeTab: S.activeTab, clientTime: new Date().toISOString()
+  };
+}
+
+/* =====================================================================
+ * 雲端同步：只在「事件」發生時送出，失敗會暫存、稍後重送
+ * ===================================================================== */
+let syncing = false, syncAgain = false, retryTimer = null, dwellDirty = false;
+function logEvent(type, detail) {
+  pending.push(Object.assign({ type, t: new Date().toISOString() }, detail || {}));
+  if (pending.length > 200) pending = pending.slice(-200);
+  lsSet(PENDING_KEY, JSON.stringify(pending));
+  saveState();
+  requestSync();
+}
+function sendPayload(payload) {
+  if (IS_GAS) return new Promise((res, rej) => google.script.run.withSuccessHandler(res).withFailureHandler(rej).recordFromClient(payload));
+  return fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) }).then(r => r.json());
+}
+function requestSync() {
+  if (!SYNC_ENABLED || !hasProfile()) return;
+  if (syncing) { syncAgain = true; return; }
+  doSync();
+}
+async function doSync() {
+  syncing = true; setSyncBadge('pending');
+  const batch = pending.slice(0, 50);
+  try {
+    const res = await sendPayload({ snapshot: buildSnapshot(), events: batch });
+    if (!res || !res.ok) throw new Error((res && res.error) || '伺服器沒有回應');
+    pending.splice(0, batch.length); lsSet(PENDING_KEY, JSON.stringify(pending));
+    dwellDirty = false; setSyncBadge('ok');
+    if (pending.length) syncAgain = true;
+  } catch (err) {
+    console.warn('同步失敗', err);
+    setSyncBadge('error');
+    clearTimeout(retryTimer); retryTimer = setTimeout(requestSync, 20000);
+  } finally {
+    syncing = false;
+    if (syncAgain) { syncAgain = false; setTimeout(requestSync, 300); }
+  }
+}
+function beaconSnapshot() {
+  if (!SYNC_ENABLED || !hasProfile()) return;
+  if (IS_GAS) { requestSync(); return; }
+  try { navigator.sendBeacon(API_URL, JSON.stringify({ snapshot: buildSnapshot(), events: [] })); } catch (e) {}
+}
+function setSyncBadge(mode) {
+  const el = $('cloud-sync-indicator'); if (!el) return;
+  const t = new Date().toLocaleTimeString('zh-TW', { hour12: false, hour: '2-digit', minute: '2-digit' });
+  const map = {
+    local: ['text-slate-600 bg-slate-50 border-slate-200', 'bg-slate-400', '本機記錄（未連線）'],
+    pending: ['text-indigo-700 bg-indigo-50 border-indigo-200', 'bg-indigo-500 animate-pulse', '傳送中…'],
+    ok: ['text-emerald-700 bg-emerald-50 border-emerald-200', 'bg-emerald-500', `已傳給老師 ${t}`],
+    error: ['text-amber-800 bg-amber-50 border-amber-300', 'bg-amber-500', `網路不穩，已暫存 ${pending.length} 筆`]
+  };
+  const [cls, dot, text] = map[mode] || map.local;
+  el.className = `text-xs font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1 border ${cls}`;
+  el.innerHTML = `<span class="w-2 h-2 rounded-full ${dot}"></span> ${text}`;
+}
+
+/* ---------- 身分 ---------- */
+function openLogin() {
+  $('login-class').value = S.profile.classId || '';
+  $('login-seat').value = S.profile.seatNo ? Number(S.profile.seatNo) : '';
+  $('login-name').value = S.profile.name || '';
+  showModal('student-login-modal', true);
+}
+function confirmStudentIdentity() {
+  const cls = $('login-class').value.trim(), seat = $('login-seat').value.trim(), name = $('login-name').value.trim();
+  if (!cls || !seat || !name) { $('login-error-msg').classList.remove('hidden'); return; }
+  $('login-error-msg').classList.add('hidden');
+  S.profile = { classId: cls, seatNo: String(parseInt(seat, 10)).padStart(2, '0'), name };
+  saveState(true);
+  showModal('student-login-modal', false);
+  updateIdentityPill();
+  logEvent('login', { ua: navigator.userAgent.slice(0, 80) });
+}
+async function logoutStudent() {
+  const ok = await confirmDialog(`確定要換人嗎？「${S.profile.name}」在這台裝置上的進度會清除（已傳給老師的紀錄不受影響）。`);
+  if (!ok) return;
+  if (pending.length && SYNC_ENABLED) { try { await sendPayload({ snapshot: buildSnapshot(), events: pending }); } catch (e) {} }
+  clearTimeout(saveTimer); clearTimeout(retryTimer);
+  lsDel(STORAGE_KEY); lsDel(PENDING_KEY);
+  S = freshState(); pending = [];
+  // 不重新載入頁面（協作平台嵌入時 reload 可能失效），直接清空畫面
+  document.querySelectorAll('#student-main input').forEach(i => { if (i.type === 'radio' || i.type === 'checkbox') i.checked = false; else if (i.id !== 'factor-input') i.value = ''; });
+  $('diag-q3-form').value = '';
+  ['diag-result'].forEach(id => $(id).classList.add('hidden'));
+  ['cp1-feedback', 'cp2-feedback', 'cp3-feedback'].forEach(id => $(id).innerHTML = '');
+  Object.keys(exProgress).forEach(k => exProgress[k] = 1);
+  sieveStep = 0; currentQ = null; qCount = 0;
+  $('sieve-question').classList.add('hidden'); $('sieve-answer').classList.add('hidden');
+  startStudent();
+}
+function updateIdentityPill() {
+  const p = S.profile;
+  $('student-identity-pill').textContent = hasProfile() ? `👤 ${p.classId} 班 ${p.seatNo} 號 ${p.name}` : '👤 未登入';
+}
+
+/* ---------- 分頁與停留時間 ---------- */
+const TABS = ['tab-diag', 'tab-mod1', 'tab-mod2', 'tab-mod3', 'tab-mod4'];
+function switchTab(tabId) {
+  if (!TABS.includes(tabId)) tabId = 'tab-diag';
+  S.activeTab = tabId; saveState();
+  document.querySelectorAll('.tab-section').forEach(sec => sec.classList.toggle('hidden', sec.id !== tabId));
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    const active = btn.dataset.tab === tabId;
+    btn.className = 'tab-btn touch-target px-3.5 py-2 rounded-xl font-black text-xs sm:text-sm transition ' +
+      (active ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200' : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200');
+  });
+  if (tabId === 'tab-mod4' && !currentQ) generateNewQuestion();
+  renderMath($(tabId));
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+setInterval(() => {
+  if (document.hidden || !hasProfile() || appMode !== 'student') return;
+  if (S.dwell[S.activeTab] !== undefined) { S.dwell[S.activeTab]++; dwellDirty = true; }
+  if (S.dwell[S.activeTab] % 10 === 0) saveState();
+}, 1000);
+// 只有停留時間變動時，每 90 秒補送一次總覽（讓老師看得到「在線」）
+setInterval(() => { if (!document.hidden && dwellDirty && appMode === 'student') requestSync(); }, 90000);
+document.addEventListener('visibilitychange', () => { if (document.hidden && appMode === 'student') { saveState(true); beaconSnapshot(); } });
+
+/* =====================================================================
+ * 0 前測
+ * ===================================================================== */
+function submitDiagnosticTest() {
+  const q1 = document.querySelector('input[name="diag-q1"]:checked');
+  const q2 = document.querySelector('input[name="diag-q2"]:checked');
+  const form = $('diag-q3-form').value, sum = parseInt($('diag-q3-sum').value, 10);
+  if (!q1 || !q2 || !form || isNaN(sum)) { toast('還有題目沒作答喔！', 'warn'); return; }
+
+  const wrong = [];
+  if (q1.value !== 'B') wrong.push({ q: 1, tab: 'tab-mod1', why: q1.value === 'A' ? '3 的倍數要看「各位數字和」，不是看個位數。' : '末兩位是用來判斷 4 的倍數，不能判斷 3 的倍數。', label: '倍數判別法' });
+  if (q2.value !== 'B') wrong.push({ q: 2, tab: 'tab-mod2', why: q2.value === 'A' ? '1 只有 1 個正因數，既不是質數也不是合數。' : '奇數不一定是質數，例如 9 = 3 × 3。', label: '質數與合數' });
+  const formWhy = { w1: '2 × 2 × 3 × 3 × 5 的值沒錯，但相同質因數要寫成次方才是「標準」分解式。', w2: '9 不是質數，還要再分解成 3²。', w3: '2³ × 3 × 5² = 600，不是 180。' };
+  if (form !== 'ok' || sum !== 10) {
+    let why = form !== 'ok' ? formWhy[form] : '';
+    if (sum !== 10) why += (why ? ' ' : '') + (sum === 2 + 2 + 3 + 3 + 5 ? '相異質因數之和每個質因數只加一次：2 + 3 + 5 = 10。' : '180 的相異質因數是 2、3、5。');
+    wrong.push({ q: 3, tab: 'tab-mod3', why, label: '標準分解式' });
+  }
+  const passed = wrong.length === 0;
+  S.pretest.attempts++;
+  if (passed && S.pretest.attempts === 1) S.pretest.firstPass = true;
+  if (passed) S.pretest.passed = true;
+  S.pretest.lastWrong = wrong.map(w => w.q);
+  logEvent('pretest', { passed, wrong: S.pretest.lastWrong, answers: { q1: q1.value, q2: q2.value, form, sum } });
+
+  const box = $('diag-result');
+  box.classList.remove('hidden');
+  if (passed) {
+    playCheer(); triggerPetalRain();
+    box.className = 'rounded-2xl p-5 border-2 space-y-3 bg-emerald-50 border-emerald-300';
+    box.innerHTML = `<p class="font-black text-emerald-800 text-lg">🎉 3 題全對！</p>
+      <p class="text-sm text-emerald-900">你可以直接去闖關。如果想挑戰自己動手分解，也可以先去「分解工作台」。</p>
+      <div class="flex flex-wrap gap-2"><button onclick="switchTab('tab-mod4')" class="touch-target px-5 py-2.5 rounded-xl bg-rose-600 text-white font-black text-sm">🔥 去闖關</button>
+      <button onclick="switchTab('tab-mod3')" class="touch-target px-5 py-2.5 rounded-xl bg-white border-2 border-emerald-300 font-bold text-sm">🛠️ 分解工作台</button></div>`;
+  } else {
+    playHint();
+    box.className = 'rounded-2xl p-5 border-2 space-y-3 bg-amber-50 border-amber-300';
+    box.innerHTML = `<p class="font-black text-amber-900">答對 ${3 - wrong.length} / 3 題。建議先複習：</p>` +
+      wrong.map(w => `<div class="bg-white rounded-xl p-3 border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div class="text-sm"><strong>第 ${w.q} 題・${w.label}</strong><br><span class="text-slate-600">${esc(w.why)}</span></div>
+        <button onclick="switchTab('${w.tab}')" class="touch-target px-4 py-2 rounded-xl bg-indigo-600 text-white font-bold text-xs shrink-0">去複習 ➜</button></div>`).join('');
+  }
+}
+
+/* =====================================================================
+ * 1 因數與倍數
+ * ===================================================================== */
+function quickFactorTest(n) { $('factor-input').value = n; findAllFactors(true); }
+function findAllFactors(record) {
+  const n = parseInt($('factor-input').value, 10), box = $('factor-result-box');
+  if (isNaN(n) || n < 1 || n > 500) { box.innerHTML = `<span class="text-rose-600 font-bold">⚠️ 請輸入 1～500 的正整數</span>`; return; }
+  if (record && !S.factorNums.includes(n)) { S.factorNums.push(n); saveState(); updateMod1Badge(); if (S.factorNums.length === 3) logEvent('explore', { what: 'factor3' }); }
+  const pairs = [];
+  for (let i = 1; i * i <= n; i++) if (n % i === 0) pairs.push([i, n / i]);
+  const count = pairs.reduce((a, [x, y]) => a + (x === y ? 1 : 2), 0);
+  const factors = []; pairs.forEach(([x, y]) => { factors.push(x); if (x !== y) factors.push(y); }); factors.sort((a, b) => a - b);
+  const tag = n === 1 ? '既不是質數也不是合數' : count === 2 ? '只有 2 個因數 → 質數' : (pairs[pairs.length - 1][0] === pairs[pairs.length - 1][1] ? '有一對是「自己乘自己」→ 因數個數是奇數' : '合數');
+  box.innerHTML = `
+    <div class="flex flex-wrap items-center justify-between gap-2"><div class="font-black text-lg">$${n}$ 的正因數（共 ${count} 個）</div><span class="text-xs font-bold px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700">${tag}</span></div>
+    <div class="flex flex-wrap gap-2">${pairs.map(([x, y]) => `<span class="px-3 py-1.5 rounded-xl font-bold ${x === y ? 'bg-amber-100 border border-amber-300' : 'bg-slate-100'}">$${n} = ${x} \\times ${y}$</span>`).join('')}</div>
+    <div class="text-sm text-slate-600">由小到大：${factors.join('、')}</div>`;
+  renderMath(box);
+}
+function updateMod1Badge() { const k = Math.min(3, S.factorNums.length); $('mod1-task-badge').textContent = k >= 3 ? '✅ 探索任務完成' : `探索任務：查 3 個不同的數（${k}/3）`; }
+
+function setCpStatus(i, passed) {
+  const el = $(`checkpoint-${i}-status`);
+  if (passed) { el.className = 'text-xs font-black text-white bg-emerald-600 px-3 py-1 rounded-full'; el.textContent = '✅ 已通過'; }
+  else { el.className = 'text-xs font-bold text-amber-800 bg-amber-200/70 px-3 py-1 rounded-full'; el.textContent = '尚未通過'; }
+}
+function cpResult(i, ok, detail) {
+  S.cp[i].a++;
+  if (ok && !S.cp[i].p) S.cp[i].p = true;
+  setCpStatus(i, S.cp[i].p);
+  logEvent('checkpoint', Object.assign({ cp: i, ok, attempt: S.cp[i].a }, detail || {}));
+  ok ? playCheer() : playHint();
+}
+
+function verifyCheckpoint1() {
+  const chosen = [...document.querySelectorAll('#cp1-options input:checked')].map(i => +i.value);
+  if (!chosen.length) { toast('至少要選一個喔', 'warn'); return; }
+  const ans = [3, 5, 9, 11];
+  const notes = {
+    2: { wrong: '個位是 5（奇數），不是 2 的倍數。', miss: '' },
+    4: { wrong: '末兩位 25 不是 4 的倍數。', miss: '' },
+    3: { wrong: '', miss: '漏了 3：7 + 4 + 2 + 5 = 18，是 3 的倍數。' },
+    5: { wrong: '', miss: '漏了 5：個位是 5。' },
+    9: { wrong: '', miss: '漏了 9：數字和 18 也是 9 的倍數。' },
+    11: { wrong: '', miss: '漏了 11：從個位起，奇數位 5 + 4 = 9，偶數位 2 + 7 = 9，差為 0。' }
+  };
+  const msgs = [];
+  [2, 4].forEach(d => chosen.includes(d) && msgs.push('✗ ' + notes[d].wrong));
+  ans.forEach(d => !chosen.includes(d) && msgs.push('△ ' + notes[d].miss));
+  const ok = msgs.length === 0;
+  cpResult(1, ok, { chosen });
+  $('cp1-feedback').innerHTML = ok
+    ? `<span class="text-emerald-700">✅ 全對！$7425 = 3^3 \\times 5^2 \\times 11$，所以是 3、5、9、11 的倍數。</span>`
+    : `<div class="text-rose-700 space-y-1">${msgs.map(m => `<div>${esc(m)}</div>`).join('')}</div>`;
+  renderMath($('cp1-feedback'));
+}
+
+/* 單選微檢核：每個選項都有對應回饋 */
+const CP_MC = {
+  2: [
+    { t: '對，奇數又不是 5 的倍數，就一定是質數', ok: false, fb: '奇數不一定是質數。5 + 1 = 6 是 3 的倍數，所以 51 是 3 的倍數。' },
+    { t: '不對，因為 $51 = 3 \\times 17$', ok: true, fb: '沒錯！51 除了 1 和 51，還有因數 3 和 17，是合數。' },
+    { t: '不對，因為 $51 = 7 \\times 7 + 2$', ok: false, fb: '51 ÷ 7 有餘數 2，代表 7 <strong>不是</strong> 51 的因數，這不能說明 51 是合數。' },
+    { t: '對，它不能被 2 和 5 整除', ok: false, fb: '只檢查 2 和 5 不夠，還要檢查 3、7……。51 可以被 3 整除。' }
+  ],
+  3: [
+    { t: '$12$', ok: false, fb: '$12 = 2^2 \\times 3$，用了 2 個 2（N 有 3 個）和 1 個 3（N 有 1 個），都夠用，所以 12 是因數。' },
+    { t: '$14$', ok: false, fb: '$14 = 2 \\times 7$，N 裡有 2 也有 7，所以 14 是因數。' },
+    { t: '$16$', ok: true, fb: '對！$16 = 2^4$ 需要 4 個 2，但 N 只有 3 個 2，所以 16 不是 N 的因數。' },
+    { t: '$42$', ok: false, fb: '$42 = 2 \\times 3 \\times 7$，N 裡 2、3、7 都有，所以 42 是因數。' }
+  ]
+};
+function renderCpMC(i) {
+  const host = $(`cp${i}-options`);
+  host.innerHTML = CP_MC[i].map((o, k) => `<button onclick="answerCpMC(${i},${k})" class="touch-target text-left px-4 py-3 rounded-xl bg-white border-2 border-amber-200 hover:border-indigo-400 font-bold text-sm">${String.fromCharCode(65 + k)}. ${o.t}</button>`).join('');
+  renderMath(host);
+}
+function answerCpMC(i, k) {
+  const o = CP_MC[i][k];
+  cpResult(i, o.ok, { chosen: k });
+  const fb = $(`cp${i}-feedback`);
+  fb.innerHTML = `<div class="${o.ok ? 'text-emerald-700' : 'text-rose-700'} bg-white rounded-xl p-3 border ${o.ok ? 'border-emerald-200' : 'border-rose-200'}">${o.ok ? '✅ ' : '❌ '}${o.fb}${o.ok ? '' : '<br><span class="text-slate-500 font-medium">再選一次看看。</span>'}</div>`;
+  renderMath(fb);
+}
+
+/* =====================================================================
+ * 2 篩法
+ * ===================================================================== */
+const SIEVE_PRIMES = [2, 3, 5, 7];
+const SIEVE_COLORS = { 2: ['#e11d48', '#ffe4e6'], 3: ['#2563eb', '#dbeafe'], 5: ['#059669', '#d1fae5'], 7: ['#7c3aed', '#ede9fe'] };
+let sieveStep = 0; // 0 未開始；1 已劃掉 1；2..5 已篩 2,3,5,7；6 全部圈出
+function sieveReset() { sieveStep = 0; $('sieve-question').classList.add('hidden'); $('sieve-answer').classList.add('hidden'); renderSieve(); }
+function sieveNext() { if (sieveStep < 6) sieveStep++; renderSieve(true); }
+function renderSieve(animate) {
+  const crossed = {}, primeMark = {};
+  if (sieveStep >= 1) crossed[1] = 'one';
+  SIEVE_PRIMES.forEach((p, idx) => {
+    if (sieveStep >= idx + 2) { primeMark[p] = p; for (let m = p * 2; m <= 100; m += p) if (!crossed[m]) crossed[m] = p; }
+  });
+  if (sieveStep >= 6) for (let n = 2; n <= 100; n++) if (!crossed[n] && !primeMark[n]) primeMark[n] = 'rest';
+  let html = '';
+  for (let n = 1; n <= 100; n++) {
+    let style = 'background:#f1f5f9;color:#334155', cls = 'sieve-cell';
+    if (crossed[n] === 'one') { cls += ' crossed'; style = 'background:#e2e8f0;color:#64748b'; }
+    else if (crossed[n]) { cls += ' crossed'; style = `background:${SIEVE_COLORS[crossed[n]][1]};color:${SIEVE_COLORS[crossed[n]][0]}`; }
+    else if (primeMark[n]) { cls += ' prime'; const c = SIEVE_COLORS[primeMark[n]] || ['#b45309', '#fef3c7']; style = `background:${c[1]};color:${c[0]}`; }
+    html += `<div class="${cls}" style="${style}">${n}</div>`;
+  }
+  $('sieve-grid').innerHTML = html;
+  const msgs = [
+    '按下按鈕，一步一步篩。',
+    '1 只有 1 個因數，不是質數，先劃掉。現在最小、沒被劃掉的數是 2。',
+    '2 留下（圈起來），2 的倍數 4、6、8…全部劃掉（紅色）。下一個沒被劃掉的數是 3。',
+    '3 留下，3 的倍數劃掉（藍色）。注意 6、12 早就被 2 劃掉了。下一個沒被劃掉的是 5。',
+    '5 留下，5 的倍數劃掉（綠色）。新被劃掉的第一個是 25 = 5 × 5。',
+    '7 留下，7 的倍數劃掉（紫色）。新被劃掉的第一個是 49 = 7 × 7。觀察看看，接下來還需要篩 11 嗎？',
+    '剩下沒被劃掉的數全部是質數！100 以內共有 25 個質數。'
+  ];
+  $('sieve-msg').textContent = msgs[sieveStep];
+  const labels = ['▶ 劃掉 1，開始篩', '▶ 篩掉 2 的倍數', '▶ 篩掉 3 的倍數', '▶ 篩掉 5 的倍數', '▶ 篩掉 7 的倍數', '▶ 圈出剩下的數', '✅ 篩完了'];
+  $('sieve-next-btn').textContent = labels[sieveStep];
+  $('sieve-next-btn').disabled = sieveStep >= 6;
+  $('sieve-progress').textContent = sieveStep === 0 ? '尚未開始' : sieveStep >= 6 ? '✅ 完成' : `進行中 ${sieveStep}/6`;
+  if (sieveStep >= 6) {
+    $('sieve-question').classList.remove('hidden'); renderMath($('sieve-question'));
+    if (animate && !S.sieveDone) { S.sieveDone = true; logEvent('explore', { what: 'sieve' }); playCheer(); }
+  }
+}
+function sieveReveal() {
+  const a = $('sieve-answer');
+  a.innerHTML = `不需要！$11$ 的倍數中，$22 = 2 \\times 11$、$33 = 3 \\times 11$、…、$77 = 7 \\times 11$，都含有比 $11$ 小的質因數，早就被劃掉了。$11$ 的倍數裡第一個「沒被更小質數劃掉」的是 $11 \\times 11 = 121$，已經超過 $100$。<br><br>
+    所以：<strong>要篩出 $N$ 以內的質數，只要篩到「平方不超過 $N$」的質數就夠了</strong>（$7^2 = 49 \\le 100$，$11^2 = 121 > 100$）。同樣的道理，判斷一個數是不是質數時，也只要試除到它的平方根附近。`;
+  a.classList.remove('hidden'); renderMath(a);
+}
+
+/* =====================================================================
+ * 3 短除法工作台
+ * ===================================================================== */
+const WB_POOL = [60, 72, 84, 90, 126, 132, 150, 168, 180, 198, 210, 225, 252, 270, 294, 300, 315, 360, 396, 420, 462, 495, 504, 588, 630, 693, 726, 750, 882, 990];
+const WB_DIVISORS = [2, 3, 4, 5, 6, 7, 9, 11, 13];
+let wb = null;
+function wbStart(n) {
+  wb = { N: n, q: n, rows: [], done: false, finished: false, compositeTried: false };
+  $('wb-phase1').classList.remove('hidden'); $('wb-phase2').classList.add('hidden');
+  $('wb-form-input').value = ''; $('wb-preview').textContent = '';
+  $('wb-feedback').innerHTML = `<span class="text-slate-600">從最小的質數開始試，先用倍數判別法想一想 ${n} 能不能被 2 整除。</span>`;
+  renderWb();
+}
+function wbNewNumber() { let n; do { n = pick(WB_POOL); } while (wb && n === wb.N); wbStart(n); }
+function wbCustom() {
+  const n = parseInt($('wb-custom').value, 10);
+  if (isNaN(n) || n < 4 || n > 1000) { toast('請輸入 4～1000 的正整數', 'warn'); return; }
+  if (isPrime(n)) { toast(`${n} 是質數，不需要分解喔！`, 'warn'); return; }
+  wbStart(n);
+}
+function renderWb() {
+  let html = '<table class="short-division-table">';
+  wb.rows.forEach((r, i) => html += `<tr class="${i === wb.rows.length - 1 ? 'sd-new' : ''}"><td class="sd-divisor">${r.d}</td><td class="sd-dividend">${r.n}</td></tr>`);
+  if (!wb.rows.length) html += `<tr><td class="sd-divisor">?</td><td class="sd-dividend">${wb.N}</td></tr>`;
+  else html += `<tr><td></td><td class="sd-remainder">${wb.q}</td></tr>`;
+  html += '</table>';
+  $('wb-table').innerHTML = html;
+  $('wb-divisor-btns').innerHTML = WB_DIVISORS.map(d => `<button onclick="wbDivide(${d})" class="touch-target w-12 rounded-xl bg-white border-2 border-slate-200 hover:border-indigo-400 font-black" ${wb.done ? 'disabled' : ''}>${d}</button>`).join('');
+  $('wb-count-badge').textContent = `已完成 ${S.workbench} 題`;
+}
+function divHint(q, d) {
+  const s = String(q), sum = [...s].reduce((a, c) => a + +c, 0);
+  if (d === 2) return `個位是 ${s.slice(-1)}，不是偶數。`;
+  if (d === 3 || d === 9) return `${[...s].join(' + ')} = ${sum}，不是 ${d} 的倍數。`;
+  if (d === 5) return `個位是 ${s.slice(-1)}，不是 0 或 5。`;
+  if (d === 11) { let odd = 0, even = 0; [...s].reverse().forEach((c, i) => i % 2 ? even += +c : odd += +c); return `奇數位和 ${odd}、偶數位和 ${even}，差 ${Math.abs(odd - even)} 不是 0 或 11 的倍數。`; }
+  return `${q} ÷ ${d} 會有餘數。`;
+}
+function wbDivide(d) {
+  if (!wb || wb.done) return;
+  const fb = $('wb-feedback');
+  if (!Number.isInteger(d) || d < 2) { fb.innerHTML = '<span class="text-rose-600">除數要是大於 1 的整數。</span>'; return; }
+  if (d >= wb.q) { fb.innerHTML = `<span class="text-rose-600">除數要比 ${wb.q} 小。</span>`; return; }
+  if (wb.q % d !== 0) {
+    addMisc('WB_notDivisor'); saveState(); playHint();
+    fb.innerHTML = `<span class="text-rose-600">❌ ${wb.q} 不能被 ${d} 整除：${divHint(wb.q, d)}</span>`; return;
+  }
+  if (!isPrime(d)) {
+    addMisc('WB_composite'); wb.compositeTried = true; saveState(); playHint();
+    const f = factorize(d);
+    fb.innerHTML = `<span class="text-amber-700">⚠️ ${wb.q} 確實能被 ${d} 整除，但 <strong>${d} 不是質數</strong>（$${d} = ${primesOf(f).map(p => termTex(p, f[p])).join(' \\times ')}$）。質因數分解要用<strong>質數</strong>去除，否則表格左邊會出現合數。試試更小的質數！</span>`;
+    renderMath(fb); return;
+  }
+  wb.rows.push({ d, n: wb.q }); wb.q /= d;
+  if (isPrime(wb.q)) {
+    wb.done = true;
+    fb.innerHTML = `<span class="text-emerald-700">👍 最後的商 ${wb.q} 是質數，不能再分了！把左邊的除數和最後的商相乘就是 ${wb.N}。現在寫出標準分解式。</span>`;
+    $('wb-phase1').classList.add('hidden'); $('wb-phase2').classList.remove('hidden');
+    $('wb-n-label').textContent = wb.N;
+    setTimeout(() => $('wb-form-input').focus(), 50);
+  } else {
+    fb.innerHTML = `<span class="text-emerald-700">✓ ${wb.rows[wb.rows.length - 1].n} ÷ ${d} = ${wb.q}。繼續！</span>`;
+  }
+  renderWb();
+}
+function wbDivideInput() { wbDivide(parseInt($('wb-divisor-input').value, 10)); $('wb-divisor-input').value = ''; }
+function wbUndo() {
+  if (!wb || !wb.rows.length || wb.finished) return;
+  const last = wb.rows.pop(); wb.q = last.n; wb.done = false;
+  $('wb-phase1').classList.remove('hidden'); $('wb-phase2').classList.add('hidden');
+  $('wb-feedback').innerHTML = '<span class="text-slate-600">已退回上一步。</span>';
+  renderWb();
+}
+function wbInsert(ch) { const el = $('wb-form-input'); const pos = el.selectionStart ?? el.value.length; el.value = el.value.slice(0, pos) + ch + el.value.slice(pos); el.focus(); el.setSelectionRange(pos + 1, pos + 1); wbPreview(); }
+function parseStdForm(str) {
+  const sup = '⁰¹²³⁴⁵⁶⁷⁸⁹';
+  let s = String(str).replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+    .replace(/[＾]/g, '^').replace(/\s*\^\s*/g, '^').trim().replace(/\s*[×xX＊*·・‧]\s*/g, '*').replace(/\s+/g, '*')
+    .replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]+/g, m => '^' + [...m].map(c => sup.indexOf(c)).join(''));
+  if (!s) return { err: '還沒輸入喔。' };
+  const terms = [];
+  for (const t of s.split('*')) {
+    const m = t.match(/^(\d+)(?:\^\{?(\d+)\}?)?$/);
+    if (!m) return { err: `看不懂「${t || '（空白）'}」，請用 2^3×5 這種寫法。` };
+    terms.push({ b: +m[1], e: m[2] !== undefined ? +m[2] : 1, hasExp: m[2] !== undefined });
+  }
+  return { terms };
+}
+function wbPreview() {
+  const r = parseStdForm($('wb-form-input').value), el = $('wb-preview');
+  if (r.err) { el.textContent = ''; return; }
+  el.innerHTML = `\\(${r.terms.map(t => t.hasExp ? `${t.b}^{${t.e}}` : t.b).join(' \\times ')}\\)`;
+  renderMath(el);
+}
+function wbCheckForm() {
+  if (!wb || !wb.done || wb.finished) return;
+  const r = parseStdForm($('wb-form-input').value), fb = $('wb-feedback');
+  const bad = (msg, mis) => { if (mis) { addMisc(mis); saveState(); } playHint(); fb.innerHTML = `<span class="text-rose-600">❌ ${msg}</span>`; renderMath(fb); };
+  if (r.err) return bad(r.err);
+  const t = r.terms;
+  if (t.some(x => x.e === 0)) return bad('指數是 0 的項不用寫出來。');
+  const prod = t.reduce((a, x) => a * Math.pow(x.b, x.e), 1);
+  if (prod !== wb.N) return bad(`你寫的式子乘起來是 ${prod}，不等於 ${wb.N}。再數一數每個質因數出現幾次。`, 'SF_product');
+  const np = t.find(x => !isPrime(x.b));
+  if (np) return bad(`${np.b} 不是質數，還可以再分解。`, 'SF_notPrime');
+  const seen = new Set(); const rep = t.find(x => seen.has(x.b) || !seen.add(x.b));
+  if (rep) return bad(`${rep.b} 出現了不只一次，相同的質因數要合併寫成次方。`, 'SF_repeat');
+  for (let i = 1; i < t.length; i++) if (t[i].b < t[i - 1].b) return bad('乘積正確！但標準分解式的底數要「由小到大」排列。', 'SF_order');
+  wb.finished = true; S.workbench++;
+  const note = t.some(x => x.hasExp && x.e === 1) ? '（小提醒：指數是 1 可以省略不寫。）' : '';
+  logEvent('workbench', { N: wb.N, steps: wb.rows.length, compositeTried: wb.compositeTried });
+  playCheer(); triggerPetalRain();
+  fb.innerHTML = `<span class="text-emerald-700">🎉 完全正確！\\(${wb.N} = ${stdTex(factorize(wb.N))}\\) ${note}</span>
+    <div class="mt-3"><button onclick="wbNewNumber()" class="touch-target px-4 py-2 rounded-xl bg-indigo-600 text-white font-bold text-sm">再來一題 ➜</button></div>`;
+  renderMath(fb); renderWb();
+}
+
+/* ---------- 範例 ---------- */
+const EXAMPLES = [
+  { id: 1, color: 'indigo', title: '題型一：短除法與標準分解式', q: '把 $180$ 做質因數分解，寫出標準分解式。', table: true,
+    steps: ['$180$ 的個位是 $0$，是 $2$ 的倍數：$180 \\div 2 = 90$。',
+      '$90$ 的個位也是 $0$，再除以 $2$：$90 \\div 2 = 45$。',
+      '$45$ 的個位是 $5$（奇數），不能再除以 $2$；$4+5=9$ 是 $3$ 的倍數：$45 \\div 3 = 15$。',
+      '$1+5=6$，仍是 $3$ 的倍數：$15 \\div 3 = 5$。',
+      '商 $5$ 是質數，停止。$180 = 2 \\times 2 \\times 3 \\times 3 \\times 5 = 2^2 \\times 3^2 \\times 5$。'] },
+  { id: 2, color: 'amber', title: '題型二：倍數判別法求未知數', q: '四位數 $42\\square 5$ 含有質因數 $11$，求 $\\square$。',
+    steps: ['含有質因數 $11$，就是 $11$ 的倍數，可以用 $11$ 的判別法。',
+      '從個位數起：奇數位是 $5$ 和 $2$，和為 $7$；偶數位是 $\\square$ 和 $4$，和為 $\\square + 4$。',
+      '差 $7 - (\\square + 4) = 3 - \\square$ 要是 $0$ 或 $11$ 的倍數。$\\square$ 是 $0 \\sim 9$ 的數字，只能 $3 - \\square = 0$。',
+      '$\\square = 3$。驗算：$4235 = 11 \\times 385$ ✔'] },
+  { id: 3, color: 'teal', title: '題型三：相異質因數之和', q: '求 $360$ 的相異質因數之和；【補充】求 $360$ 的正因數個數。',
+    steps: ['短除法：$360 = 2^3 \\times 3^2 \\times 5$。',
+      '相異質因數是 $2, 3, 5$，和 $= 2+3+5 = 10$。注意：$2$ 雖然出現 $3$ 次，只算一次！',
+      '【補充】每個正因數都可寫成 $2^a \\times 3^b \\times 5^c$，其中 $a$ 有 $0,1,2,3$ 共 $4$ 種、$b$ 有 $3$ 種、$c$ 有 $2$ 種。',
+      '【補充】正因數個數 $= 4 \\times 3 \\times 2 = 24$ 個，也就是 $(3+1)(2+1)(1+1)$。'] },
+  { id: 4, color: 'rose', title: '題型四：湊成完全平方數', q: '正整數 $a$ 使 $252 \\times a$ 成為完全平方數 $b^2$，求 $a$ 的最小值及此時的 $b$（$b>0$）。',
+    steps: ['觀察：$36 = 2^2 \\times 3^2$、$144 = 2^4 \\times 3^2$。完全平方數的標準分解式中，每個指數都是偶數。',
+      '$252 = 2^2 \\times 3^2 \\times 7$，只有 $7$ 的指數是 $1$（奇數）。',
+      '只要再乘一個 $7$：$252 \\times 7 = 2^2 \\times 3^2 \\times 7^2 = (2 \\times 3 \\times 7)^2 = 42^2$。',
+      '所以 $a = 7$，$b = 42$。'] }
+];
+const exProgress = { 1: 1, 2: 1, 3: 1, 4: 1 };
+const EX1_ROWS = [[2, 180], [2, 90], [3, 45], [3, 15]];
+function renderExamplesShell() {
+  $('examples-host').innerHTML = EXAMPLES.map(ex => `
+    <div class="rounded-2xl border-2 border-${ex.color}-100 bg-${ex.color}-50/30 p-5">
+      <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+        <span class="px-3 py-1 rounded-xl bg-${ex.color}-600 text-white font-black text-sm">${ex.title}</span>
+        <div class="flex flex-wrap gap-2">
+          <button onclick="exStep(${ex.id},1)" class="touch-target px-4 py-2 rounded-xl bg-${ex.color}-600 text-white font-bold text-xs">▶ 下一步</button>
+          <button onclick="exStep(${ex.id},99)" class="touch-target px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs">⏩ 全部</button>
+          <button onclick="exStep(${ex.id},-99)" class="touch-target px-3 py-2 rounded-xl bg-slate-200 text-slate-700 font-bold text-xs">↺</button>
+        </div>
+      </div>
+      <div class="bg-white rounded-xl p-4 border border-${ex.color}-100 mb-4 font-bold text-slate-800">【例題 ${ex.id}】${ex.q}</div>
+      <div class="${ex.table ? 'grid grid-cols-1 md:grid-cols-2 gap-6 items-start' : ''}">
+        ${ex.table ? `<div class="bg-white rounded-2xl p-5 border border-slate-200 flex justify-center min-h-[200px] items-center" id="ex1-table"></div>` : ''}
+        <div id="ex${ex.id}-steps" class="space-y-2.5"></div>
+      </div>
+    </div>`).join('');
+  EXAMPLES.forEach(ex => renderExample(ex.id));
+  renderMath($('examples-host'));
+}
+function renderExample(id) {
+  const ex = EXAMPLES[id - 1], k = exProgress[id];
+  const host = $(`ex${id}-steps`);
+  host.innerHTML = ex.steps.slice(0, k).map((s, i) => `<div class="p-3 bg-white border border-slate-200 rounded-xl shadow-sm text-sm leading-relaxed"><span class="font-black text-slate-400 mr-1">${i + 1}.</span>${s}</div>`).join('') +
+    (k < ex.steps.length ? `<div class="p-3 rounded-xl border-2 border-dashed border-slate-200 text-xs text-slate-400 font-bold">還有 ${ex.steps.length - k} 步…先想想下一步是什麼？</div>` : '');
+  if (ex.table) {
+    const shown = EX1_ROWS.slice(0, Math.min(k, 4));
+    const q = shown.length ? shown[shown.length - 1][1] / shown[shown.length - 1][0] : 180;
+    $('ex1-table').innerHTML = `<table class="short-division-table">${shown.map(([d, n]) => `<tr><td class="sd-divisor">${d}</td><td class="sd-dividend">${n}</td></tr>`).join('')}<tr><td></td><td class="sd-remainder">${q}</td></tr></table>`;
+  }
+  renderMath(host);
+}
+function exStep(id, delta) {
+  const ex = EXAMPLES[id - 1];
+  exProgress[id] = Math.max(1, Math.min(ex.steps.length, exProgress[id] + delta));
+  renderExample(id);
+  if (exProgress[id] === ex.steps.length && !S.examples[id]) { S.examples[id] = true; logEvent('example', { ex: id }); }
+  updateExProgress();
+}
+function updateExProgress() { const k = Object.values(S.examples).filter(Boolean).length; $('mod3-read-progress').textContent = k === 4 ? '✅ 四題都看完了' : `📖 已看完 ${k} / 4 題`; }
+
+/* =====================================================================
+ * 4 闖關：亂數產生＋迷思導向誘答
+ * ===================================================================== */
+const MIS = {
+  A_count: '數錯質因數個數（指數寫錯）', A_composite: '分解不完全：式子裡還有合數', A_expanded: '相同質因數沒寫成次方', A_order: '底數沒有由小到大',
+  B_multiplicity: '相異質因數之和：重複的質因數重複加', B_includeOne: '把 1 當成質因數', B_powerSum: '把 pⁿ 整個當成質因數相加', B_missOne: '漏掉一個質因數',
+  C_powerAsPrime: '把 pⁿ（如 8、9）當成質因數', C_largestFactor: '把「最大因數」當成「最大質因數」', C_minPrime: '最大/最小質因數混淆',
+  D_isFactor: '不會用標準分解式判斷因數', E_allPrimes: '湊平方：指數已是偶數的也去補', E_notMin: '湊平方：沒有找「最小」值', E_square: '湊平方：把要補的數又平方', E_partial: '湊平方：漏補指數為奇數的質因數',
+  WB_composite: '工作台：用合數當除數', WB_notDivisor: '工作台：除數不能整除（判別法不熟）',
+  SF_product: '標準式：乘積不等於原數', SF_notPrime: '標準式：底數不是質數', SF_repeat: '標準式：相同質因數沒合併', SF_order: '標準式：底數順序錯'
+};
+const QTYPES = { A: '題型 A・寫出標準分解式', B: '題型 B・相異質因數之和', C: '題型 C・最大質因數', D: '題型 D・判斷是不是因數', E: '題型 E・湊成完全平方數' };
+const QPRIMES = [2, 3, 5, 7, 11];
+
+function genN(needOdd) {
+  for (let t = 0; t < 1000; t++) {
+    const e = { 2: ri(0, 4), 3: ri(0, 3), 5: ri(0, 2), 7: ri(0, 1), 11: Math.random() < 0.15 ? 1 : 0 };
+    const ps = primesOf(e), n = ps.reduce((a, p) => a * Math.pow(p, e[p]), 1), tot = ps.reduce((a, p) => a + e[p], 0);
+    if (ps.length < 2 || tot < 3 || n < 24 || n > 1200) continue;
+    if (needOdd && !ps.some(p => e[p] % 2)) continue;
+    return { n, e, ps };
+  }
+}
+function mk(text, mis, v) { return { text, mis, v }; }
+function finalizeOptions(correct, cands, filler) {
+  const seen = new Set([correct.text]), out = [];
+  for (const c of shuffle(cands)) { if (out.length >= 3) break; if (!seen.has(c.text)) { seen.add(c.text); out.push(c); } }
+  let guard = 0;
+  while (out.length < 3 && guard++ < 50) { const f = filler(); if (!seen.has(f.text)) { seen.add(f.text); out.push(f); } }
+  return shuffle([Object.assign({ ok: true }, correct), ...out.map(o => Object.assign({ ok: false }, o))]);
+}
+function genQuestion(type) {
+  const F = genN(type === 'E'), { n, e, ps } = F, std = stdTex(e);
+  const tex = s => `\\(${s}\\)`;
+  const numOpt = (v, mis) => mk(tex(v), mis, v);
+  let stem, options, explain;
+  const numFill = base => () => numOpt(Math.max(2, base + pick([-3, -2, -1, 1, 2, 3, 4])), null);
+
+  if (type === 'A') {
+    stem = `正整數 \\(${n}\\) 的標準分解式是哪一個？`;
+    const cands = [];
+    ps.forEach(p => { const e2 = Object.assign({}, e); e2[p] = e[p] === 1 ? 2 : e[p] + pick([-1, 1]); cands.push(mk(tex(stdTex(e2)), 'A_count')); });
+    const big = ps.filter(p => e[p] >= 2);
+    if (big.length) { const p = pick(big); cands.push(mk(tex(ps.map(q => q === p ? String(Math.pow(p, e[p])) : termTex(q, e[q])).join(' \\times ')), 'A_composite')); }
+    else cands.push(mk(tex([String(ps[0] * ps[1]), ...ps.slice(2).map(q => termTex(q, e[q]))].join(' \\times ')), 'A_composite'));
+    if (big.length) cands.push(mk(tex(ps.flatMap(p => Array(e[p]).fill(String(p))).join(' \\times ')), 'A_expanded'));
+    cands.push(mk(tex([...ps].reverse().map(p => termTex(p, e[p])).join(' \\times ')), 'A_order'));
+    // 每種迷思最多出現一次，讓四個選項各代表不同錯誤
+    const byMis = {}; shuffle(cands).forEach(c => { if (!byMis[c.mis]) byMis[c.mis] = c; });
+    const primary = Object.values(byMis), extra = cands.filter(c => !primary.includes(c));
+    options = finalizeOptions(mk(tex(std)), primary.length >= 3 ? primary : primary.concat(extra), () => { const p = pick(ps), e2 = Object.assign({}, e); e2[p] = e[p] + ri(1, 2); return mk(tex(stdTex(e2)), 'A_count'); });
+    explain = `用短除法：\\(${n} = ${std}\\)。標準分解式要符合三件事：① 每個底數都是質數；② 相同質因數寫成次方；③ 底數由小到大。`;
+  }
+  if (type === 'B') {
+    stem = `正整數 \\(${n}\\) 的所有<strong>相異質因數之和</strong>是多少？`;
+    const S0 = ps.reduce((a, p) => a + p, 0);
+    const cands = [numOpt(ps.reduce((a, p) => a + p * e[p], 0), 'B_multiplicity'), numOpt(S0 + 1, 'B_includeOne'),
+      numOpt(ps.reduce((a, p) => a + Math.pow(p, e[p]), 0), 'B_powerSum'), numOpt(S0 - ps[ps.length - 1], 'B_missOne')];
+    options = finalizeOptions(numOpt(S0), cands.filter(c => c.v > 0), numFill(S0));
+    explain = `\\(${n} = ${std}\\)，相異質因數是 ${ps.join('、')}，每個只加一次：\\(${ps.join(' + ')} = ${S0}\\)。`;
+  }
+  if (type === 'C') {
+    stem = `正整數 \\(${n}\\) 的<strong>最大質因數</strong>是多少？`;
+    const M = ps[ps.length - 1];
+    const powers = ps.filter(p => e[p] >= 2).map(p => Math.pow(p, e[p]));
+    const cands = [numOpt(n / ps[0], 'C_largestFactor'), numOpt(ps[0], 'C_minPrime')];
+    if (powers.length) cands.push(numOpt(Math.max(...powers), 'C_powerAsPrime'));
+    options = finalizeOptions(numOpt(M), cands, () => numOpt(pick([4, 6, 9, 13, 15, 17, 21].filter(x => x !== M)), null));
+    explain = `\\(${n} = ${std}\\)，質因數有 ${ps.join('、')}，最大的是 ${M}。像 ${powers.length ? Math.max(...powers) : 9} 這種「次方後的數」不是質數，\\(${n / ps[0]}\\) 是 ${n} 的因數但也不是質數。`;
+  }
+  if (type === 'D') {
+    stem = `已知 \\(N = ${std}\\)，下列哪一個數<strong>不是</strong> \\(N\\) 的因數？`;
+    let bad, badWhy;
+    if (Math.random() < 0.6) {
+      const p = pick(ps.filter(q => Math.pow(q, e[q] + 1) <= 400).length ? ps.filter(q => Math.pow(q, e[q] + 1) <= 400) : ps);
+      bad = Math.pow(p, e[p] + 1);
+      const others = ps.filter(q => q !== p && bad * q <= 300);
+      if (others.length && Math.random() < 0.5) bad *= pick(others);
+      badWhy = `需要 ${e[p] + 1} 個 ${p}，但 N 只有 ${e[p]} 個 ${p}`;
+    } else {
+      const q = pick([3, 5, 7, 11, 13].filter(x => !ps.includes(x)));
+      bad = q * pick(ps); badWhy = `含有質因數 ${q}，但 N 沒有 ${q}`;
+    }
+    const factorCands = [];
+    for (let t = 0; t < 80 && factorCands.length < 10; t++) {
+      const v = ps.reduce((a, p) => a * Math.pow(p, ri(0, e[p])), 1);
+      if (v > 3 && v < n && v !== bad && !factorCands.includes(v)) factorCands.push(v);
+    }
+    const bf = factorize(bad);
+    options = finalizeOptions(numOpt(bad), factorCands.map(v => numOpt(v, 'D_isFactor')), () => numOpt(pick(ps) * pick(ps), 'D_isFactor'));
+    options.forEach(o => { if (!o.ok) { const v = o.v; o.why = `\\(${v} = ${stdTex(factorize(v))}\\)，用到的質因數 N 都有，而且個數夠，是 N 的因數。`; } });
+    explain = `\\(${bad} = ${stdTex(bf)}\\)，${badWhy}，所以不是 N 的因數。判斷方法：把選項也做質因數分解，看看每個質因數的個數有沒有超過 N。`;
+  }
+  if (type === 'E') {
+    stem = `若 \\(${n} \\times a\\) 是完全平方數，\\(a\\) 是正整數，則 \\(a\\) 的最小值是多少？`;
+    const odd = ps.filter(p => e[p] % 2), a = odd.reduce((x, p) => x * p, 1);
+    const allP = ps.reduce((x, p) => x * p, 1);
+    const cands = [numOpt(a * a, 'E_square'), numOpt(n, 'E_notMin')];
+    if (allP !== a) cands.push(numOpt(allP, 'E_allPrimes'));
+    if (odd.length >= 2) cands.push(numOpt(odd[odd.length - 1], 'E_partial'), numOpt(odd[0], 'E_partial'));
+    options = finalizeOptions(numOpt(a), cands, () => numOpt(a * pick([2, 3, 5]), 'E_notMin'));
+    const e2 = Object.assign({}, e); odd.forEach(p => e2[p]++);
+    const root = ps.reduce((x, p) => x * Math.pow(p, e2[p] / 2), 1);
+    explain = `\\(${n} = ${std}\\)。完全平方數的每個指數都是偶數，指數是奇數的質因數有 ${odd.join('、')}，各補一個：\\(a = ${odd.join(' \\times ')} = ${a}\\)。<br>\\(${n} \\times ${a} = ${stdTex(e2)} = ${root}^2\\)。`;
+  }
+  return { type, n, stem, options, explain };
+}
+
+let currentQ = null, answered = false, qStart = 0, qTimer = null, qCount = 0;
+function chooseType() {
+  const types = Object.keys(QTYPES);
+  if (Math.random() < 0.5) {
+    const score = t => { const s = S.quiz.types[t]; return !s || !s.t ? -1 : s.c / s.t; };
+    const min = Math.min(...types.map(score));
+    return pick(types.filter(t => score(t) === min));
+  }
+  return pick(types);
+}
+function generateNewQuestion() {
+  answered = false; qCount++;
+  currentQ = genQuestion(chooseType());
+  $('quiz-feedback-panel').classList.add('hidden');
+  $('rapid-guess-alert').classList.add('hidden');
+  $('quiz-qnum-label').textContent = `第 ${qCount} 題`;
+  $('quiz-type-badge').textContent = QTYPES[currentQ.type];
+  $('quiz-question-stem').innerHTML = currentQ.stem;
+  $('quiz-options-grid').innerHTML = currentQ.options.map((o, i) => `
+    <button onclick="submitQuizAnswer(${i})" id="quiz-opt-${i}" class="opt-btn touch-target w-full text-left p-4 rounded-2xl border-2 border-slate-200 bg-white shadow-sm font-bold text-slate-800 hover:border-indigo-400 flex items-center gap-3">
+      <span class="w-8 h-8 shrink-0 rounded-lg bg-slate-100 inline-flex items-center justify-center">${'ABCD'[i]}</span><span class="text-lg">${o.text}</span></button>`).join('');
+  renderMath([$('quiz-question-stem'), $('quiz-options-grid')]);
+  qStart = performance.now();
+  clearInterval(qTimer);
+  qTimer = setInterval(() => { if (!answered) $('quiz-timer-display').textContent = `⏱️ ${((performance.now() - qStart) / 1000).toFixed(1)} 秒`; }, 100);
+}
+function submitQuizAnswer(i) {
+  if (answered || !currentQ) return;
+  answered = true; clearInterval(qTimer);
+  const sec = Math.round((performance.now() - qStart) / 100) / 10;
+  const o = currentQ.options[i], ok = !!o.ok, rapid = sec < RAPID_SEC;
+  const q = S.quiz;
+  q.attempts++; q.totalSec += sec;
+  q.types[currentQ.type] = q.types[currentQ.type] || { t: 0, c: 0 };
+  q.types[currentQ.type].t++;
+  if (ok) { q.correct++; q.types[currentQ.type].c++; q.streak++; q.bestStreak = Math.max(q.bestStreak, q.streak); if (!rapid) q.validCorrect++; }
+  else { q.streak = 0; if (o.mis) addMisc(o.mis); }
+  if (rapid) q.rapid++;
+  const log = { type: currentQ.type, n: currentQ.n, ok, sec, rapid, mis: ok ? null : (o.mis || null), at: new Date().toLocaleTimeString('zh-TW', { hour12: false }) };
+  q.logs.unshift(log); q.logs = q.logs.slice(0, 30);
+  logEvent('quiz', log);
+
+  currentQ.options.forEach((opt, k) => { const b = $(`quiz-opt-${k}`); b.disabled = true; if (opt.ok) b.classList.add('correct'); else if (k === i) b.classList.add('wrong'); });
+  if (rapid) { document.querySelectorAll('.rapid-sec').forEach(e => e.textContent = RAPID_SEC); const al = $('rapid-guess-alert'); al.classList.remove('hidden', 'warn-pulse'); void al.offsetWidth; al.classList.add('warn-pulse'); }
+  ok ? (playCheer(), rapid || triggerPetalRain()) : playHint();
+
+  const panel = $('quiz-feedback-panel');
+  panel.className = `rounded-2xl p-5 sm:p-6 border-2 space-y-4 ${ok ? 'bg-emerald-50 border-emerald-300' : 'bg-rose-50 border-rose-300'}`;
+  $('feedback-emoji').textContent = ok ? (rapid ? '🐇' : '🎉') : '💪';
+  $('feedback-title').textContent = ok ? (rapid ? '答對了，但太快了' : '答對了！') : '再想想看';
+  $('feedback-praise').textContent = ok ? (q.streak >= 3 ? `連續答對 ${q.streak} 題！` : '觀念很清楚！') : '看看下面的解析，找出卡住的地方。';
+  $('quiz-explanation-box').innerHTML =
+    (!ok && (o.mis || o.why) ? `<div class="rounded-xl bg-rose-50 border border-rose-200 p-3 text-sm"><strong>🔍 你選的答案：</strong>${o.why || ('可能是「' + esc(MIS[o.mis]) + '」')}</div>` : '') +
+    `<div class="text-sm sm:text-base"><strong>解析：</strong>${currentQ.explain}</div>`;
+  panel.classList.remove('hidden');
+  renderMath(panel);
+  updateQuizStats();
+}
+function updateQuizStats() {
+  const q = S.quiz;
+  $('quiz-score').textContent = q.validCorrect;
+  $('quiz-streak').textContent = q.streak;
+  $('quiz-acc').textContent = q.attempts ? Math.round(quizAcc() * 100) + '%' : '–';
+  const items = [
+    [`有效答對 ${q.validCorrect} / ${MASTERY.valid} 題`, q.validCorrect >= MASTERY.valid],
+    [`正確率 ${q.attempts ? Math.round(quizAcc() * 100) : 0}% / ${MASTERY.acc * 100}%`, q.attempts > 0 && quizAcc() >= MASTERY.acc],
+    [`答對過 ${typesCorrect()} / ${MASTERY.types} 種題型`, typesCorrect() >= MASTERY.types]
+  ];
+  $('mastery-list').innerHTML = items.map(([t, ok]) => `<div class="px-3 py-2 rounded-xl ${ok ? 'bg-emerald-100 text-emerald-800' : 'bg-white text-slate-600'} border ${ok ? 'border-emerald-300' : 'border-slate-200'}">${ok ? '✅' : '⬜'} ${t}</div>`).join('');
+  const m = isMastered(), badge = $('mastery-badge');
+  if (m && !S.masteredAnnounced) { S.masteredAnnounced = true; logEvent('mastered', {}); toast('🏆 恭喜！你已經達到精熟目標！', 'ok'); triggerPetalRain(); }
+  badge.textContent = m ? '🏆 已精熟' : '挑戰中';
+  badge.className = `text-xs font-bold px-2.5 py-1 rounded-full border ${m ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-indigo-700 border-indigo-200'}`;
+}
+
+/* =====================================================================
+ * 教師戰情室
+ * ===================================================================== */
+let teacherData = null, teacherKey = '', teacherTimer = null;
+function fetchClassData(key) {
+  if (IS_GAS) return new Promise((res, rej) => google.script.run.withSuccessHandler(res).withFailureHandler(rej).getClassData(key));
+  return fetch(`${API_URL}?api=data&key=${encodeURIComponent(key)}`).then(r => r.json());
+}
+async function unlockTeacherDashboard() {
+  const key = $('teacher-pin-input').value.trim(), err = $('teacher-pin-error');
+  err.classList.add('hidden');
+  if (!SYNC_ENABLED) { teacherKey = ''; enterDashboard(); return; }
+  if (!key) { err.textContent = '請輸入教師密碼'; err.classList.remove('hidden'); return; }
+  try {
+    const res = await fetchClassData(key);
+    if (!res || !res.ok) throw new Error(res && res.error || '無法讀取資料');
+    teacherKey = key; ssSet('pf_teacher_key', key);
+    teacherData = res; enterDashboard();
+  } catch (e) { err.textContent = '❌ ' + (e.message || e); err.classList.remove('hidden'); }
+}
+function enterDashboard() {
+  $('teacher-auth-gate').classList.add('hidden');
+  $('teacher-dashboard-content').classList.remove('hidden');
+  if (!SYNC_ENABLED) {
+    // 本機預覽：只看得到這台裝置自己的紀錄
+    loadState();
+    teacherData = { ok: true, serverTime: new Date().toISOString(), students: hasProfile() ? [{ key: 'local', classId: S.profile.classId, seatNo: S.profile.seatNo, name: S.profile.name, updatedAt: new Date().toISOString(), data: buildSnapshot() }] : [] };
+    $('teacher-refresh-tag').textContent = '⚠️ 尚未設定雲端網址：只顯示這台裝置的紀錄';
+    $('teacher-refresh-tag').className = 'px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 font-bold text-xs';
+  }
+  renderTeacher();
+  clearInterval(teacherTimer);
+  teacherTimer = setInterval(() => { if ($('auto-refresh').checked && !document.hidden) loadTeacherData(); }, 30000);
+}
+async function loadTeacherData() {
+  if (!SYNC_ENABLED) { enterDashboard(); return; }
+  const tag = $('teacher-refresh-tag');
+  tag.textContent = '更新中…';
+  try {
+    const res = await fetchClassData(teacherKey);
+    if (!res || !res.ok) throw new Error(res && res.error || '讀取失敗');
+    teacherData = res; renderTeacher();
+  } catch (e) {
+    tag.textContent = '⚠️ 更新失敗：' + (e.message || e);
+    tag.className = 'px-3 py-1 rounded-full bg-rose-500/20 text-rose-300 font-bold text-xs';
+  }
+}
+function studentFlags(s) {
+  const d = s.data || {}, q = d.quiz || {}, acc = q.attempts ? q.correct / q.attempts : null, f = [];
+  if ((q.rapid || 0) >= 3) f.push('常常太快作答');
+  if (d.pretest && d.pretest.firstPass && q.attempts >= 5 && acc < 0.6) f.push('前測全對但闖關偏低');
+  if (q.attempts >= 8 && acc < 0.5) f.push('闖關正確率低於 50%');
+  if ((d.misc || {}).WB_composite >= 3) f.push('常用合數當除數');
+  return f;
+}
+function filteredStudents() {
+  if (!teacherData) return [];
+  const sel = $('class-filter-select').value;
+  return teacherData.students.filter(s => sel === 'ALL' || s.classId === sel)
+    .sort((a, b) => a.classId.localeCompare(b.classId) || (+a.seatNo - +b.seatNo));
+}
+function onlineStatus(s) {
+  const diff = (new Date(teacherData.serverTime) - new Date(s.updatedAt)) / 60000;
+  if (diff < 3) return ['🟢 在線', 'bg-emerald-100 text-emerald-800'];
+  if (diff < 15) return ['🟡 剛離開', 'bg-amber-100 text-amber-800'];
+  return ['⚪ 離線', 'bg-slate-100 text-slate-500'];
+}
+function renderTeacher() {
+  if (!teacherData) return;
+  // 班級選單
+  const sel = $('class-filter-select'), cur = sel.value;
+  const classes = [...new Set(teacherData.students.map(s => s.classId))].sort();
+  sel.innerHTML = '<option value="ALL">全部班級</option>' + classes.map(c => `<option value="${esc(c)}">${esc(c)} 班</option>`).join('');
+  sel.value = classes.includes(cur) ? cur : 'ALL';
+
+  const list = filteredStudents();
+  if (SYNC_ENABLED) {
+    const t = new Date(teacherData.serverTime).toLocaleTimeString('zh-TW', { hour12: false });
+    $('teacher-refresh-tag').textContent = `🟢 資料時間 ${t}`;
+    $('teacher-refresh-tag').className = 'px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 font-bold text-xs';
+  }
+  $('stat-total').textContent = list.length;
+  $('stat-online').textContent = list.filter(s => onlineStatus(s)[0].includes('在線')).length;
+  $('stat-pretest').textContent = list.filter(s => s.data && s.data.pretest && s.data.pretest.firstPass).length;
+  $('stat-attention').textContent = list.filter(s => studentFlags(s).length).length;
+  $('stat-master').textContent = list.filter(s => s.data && s.data.mastered).length;
+
+  // 迷思統計
+  const agg = {};
+  list.forEach(s => Object.entries((s.data && s.data.misc) || {}).forEach(([k, v]) => { if (!agg[k]) agg[k] = { students: 0, total: 0 }; agg[k].students++; agg[k].total += v; }));
+  const rows = Object.entries(agg).sort((a, b) => b[1].students - a[1].students || b[1].total - a[1].total).slice(0, 10);
+  const maxS = Math.max(1, ...rows.map(r => r[1].students));
+  $('class-misc-list').innerHTML = rows.length ? rows.map(([k, v]) => `
+    <div><div class="flex justify-between text-sm font-bold text-slate-700 mb-1"><span>${esc(MIS[k] || k)}</span><span>${v.students} 人 <span class="text-slate-400 font-medium">(${v.total})</span></span></div>
+    <div class="bar-track"><div class="bar-fill bg-rose-500" style="width:${v.students / maxS * 100}%"></div></div></div>`).join('')
+    : '<p class="text-sm text-slate-400">還沒有資料。</p>';
+
+  // 題型正確率
+  $('class-type-list').innerHTML = Object.keys(QTYPES).map(t => {
+    let tt = 0, cc = 0; list.forEach(s => { const x = s.data && s.data.quiz && s.data.quiz.types && s.data.quiz.types[t]; if (x) { tt += x.t; cc += x.c; } });
+    const pct = tt ? Math.round(cc / tt * 100) : null;
+    const color = pct == null ? 'bg-slate-300' : pct >= 80 ? 'bg-emerald-500' : pct >= 60 ? 'bg-amber-500' : 'bg-rose-500';
+    return `<div><div class="flex justify-between text-sm font-bold text-slate-700 mb-1"><span>${QTYPES[t]}</span><span>${pct == null ? '–' : pct + '%'} <span class="text-slate-400 font-medium">(${cc}/${tt})</span></span></div>
+      <div class="bar-track"><div class="bar-fill ${color}" style="width:${pct || 0}%"></div></div></div>`;
+  }).join('');
+
+  // 名單
+  $('class-roster-tbody').innerHTML = list.length ? list.map((s, idx) => {
+    const d = s.data || {}, q = d.quiz || {}, st = onlineStatus(s), flags = studentFlags(s);
+    const acc = q.attempts ? Math.round(q.correct / q.attempts * 100) + '%' : '–';
+    return `<tr class="hover:bg-slate-50 ${flags.length ? 'bg-rose-50/40' : ''}">
+      <td class="py-3 px-2 font-bold whitespace-nowrap">${esc(s.classId)}-${esc(s.seatNo)} ${esc(s.name)} ${d.mastered ? '🏆' : ''}</td>
+      <td class="py-3 px-2"><span class="px-2 py-0.5 rounded text-xs font-bold whitespace-nowrap ${st[1]}">${st[0]}</span></td>
+      <td class="py-3 px-2 text-xs">${esc(d.entryLabel || '')}</td>
+      <td class="py-3 px-2">${Math.round((d.readSec || 0) / 60)}</td>
+      <td class="py-3 px-2">${d.cpCount || 0}/3</td>
+      <td class="py-3 px-2">${d.workbench || 0}</td>
+      <td class="py-3 px-2 whitespace-nowrap"><strong class="text-indigo-700">${q.validCorrect || 0}</strong>/${q.attempts || 0} <span class="text-slate-400">(${acc})</span></td>
+      <td class="py-3 px-2 ${(q.rapid || 0) >= 3 ? 'text-rose-600 font-black' : ''}">${q.rapid || 0}</td>
+      <td class="py-3 px-2 text-xs text-rose-700">${flags.map(esc).join('<br>')}</td>
+      <td class="py-3 px-2 text-right"><button onclick="openDetail(${idx})" class="px-3 py-1 bg-indigo-600 text-white rounded-lg text-xs font-bold">明細</button></td></tr>`;
+  }).join('') : '<tr><td colspan="10" class="py-6 text-center text-slate-400">目前還沒有學生資料。</td></tr>';
+}
+function openDetail(idx) {
+  const s = filteredStudents()[idx]; if (!s) return;
+  const d = s.data || {}, q = d.quiz || {}, dw = d.dwell || {};
+  $('detail-title').textContent = `${s.classId} 班 ${s.seatNo} 號 ${s.name}`;
+  const misc = Object.entries(d.misc || {}).sort((a, b) => b[1] - a[1]);
+  const cp = d.cp || {};
+  $('detail-body').innerHTML = `
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      ${[['進入方式', esc(d.entryLabel || '')], ['前測次數', (d.pretest && d.pretest.attempts) || 0], ['篩法', d.sieveDone ? '✅ 完成' : '未完成'], ['範例看完', (d.examplesDone || 0) + '/4']]
+        .map(([k, v]) => `<div class="rounded-xl bg-slate-50 border border-slate-200 p-3"><div class="text-xs text-slate-500 font-bold">${k}</div><div class="font-black mt-0.5">${v}</div></div>`).join('')}
+    </div>
+    <div><h4 class="font-black mb-2">⏱️ 各模組停留時間</h4><div class="flex flex-wrap gap-2 text-xs font-bold">
+      ${[['前測', 'tab-diag'], ['因數倍數', 'tab-mod1'], ['質數篩法', 'tab-mod2'], ['工作台範例', 'tab-mod3'], ['闖關', 'tab-mod4']].map(([n, k]) => `<span class="px-3 py-1.5 rounded-lg bg-slate-100">${n} ${fmtSec(dw[k])}</span>`).join('')}</div></div>
+    <div><h4 class="font-black mb-2">🎯 微檢核</h4><div class="flex flex-wrap gap-2 text-xs font-bold">
+      ${[1, 2, 3].map(i => { const c = cp[i] || {}; return `<span class="px-3 py-1.5 rounded-lg ${c.p ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100'}">重點${i}：${c.p ? '通過' : '未通過'}（試 ${c.a || 0} 次）</span>`; }).join('')}</div></div>
+    <div><h4 class="font-black mb-2">📊 闖關各題型</h4><table class="w-full text-xs"><tr class="text-slate-500"><th class="text-left py-1">題型</th><th>作答</th><th>答對</th><th>正確率</th></tr>
+      ${Object.keys(QTYPES).map(t => { const x = (q.types || {})[t] || { t: 0, c: 0 }; return `<tr class="border-t border-slate-100"><td class="py-1.5">${QTYPES[t]}</td><td class="text-center">${x.t}</td><td class="text-center">${x.c}</td><td class="text-center font-bold">${x.t ? Math.round(x.c / x.t * 100) + '%' : '–'}</td></tr>`; }).join('')}</table>
+      <p class="text-xs text-slate-500 mt-2">平均作答 ${q.avgSec || 0} 秒・最佳連勝 ${q.bestStreak || 0}・太快作答 ${q.rapid || 0} 次・工作台完成 ${d.workbench || 0} 題</p></div>
+    <div><h4 class="font-black mb-2">🧠 迷思紀錄</h4>${misc.length ? `<div class="flex flex-wrap gap-2">${misc.map(([k, v]) => `<span class="px-3 py-1.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold">${esc(MIS[k] || k)} × ${v}</span>`).join('')}</div>` : '<p class="text-xs text-slate-400">沒有紀錄</p>'}</div>
+    <div><h4 class="font-black mb-2">📝 最近作答</h4>${(q.logs || []).length ? `<table class="w-full text-xs"><tr class="text-slate-500"><th class="text-left py-1">時間</th><th>題型</th><th>數</th><th>結果</th><th>秒數</th><th class="text-left">迷思</th></tr>
+      ${q.logs.map(l => `<tr class="border-t border-slate-100"><td class="py-1.5">${esc(l.at)}</td><td class="text-center">${esc(l.type)}</td><td class="text-center">${esc(l.n)}</td><td class="text-center">${l.ok ? '✅' : '❌'}</td><td class="text-center ${l.rapid ? 'text-rose-600 font-black' : ''}">${esc(l.sec)}</td><td>${l.mis ? esc(MIS[l.mis] || l.mis) : ''}</td></tr>`).join('')}</table>` : '<p class="text-xs text-slate-400">尚未作答</p>'}</div>`;
+  showModal('detail-modal', true);
+}
+function closeDetail() { showModal('detail-modal', false); }
+function exportClassCsv() {
+  const list = filteredStudents();
+  if (!list.length) { toast('目前沒有資料可以匯出', 'warn'); return; }
+  const head = ['班級', '座號', '姓名', '進入方式', '學習秒數', '微檢核通過', '篩法', '範例看完', '工作台完成', '作答題數', '答對', '有效答對', '正確率', '太快作答', '平均秒數', '精熟', '提醒', '主要迷思', '最後更新'];
+  const rows = list.map(s => {
+    const d = s.data || {}, q = d.quiz || {};
+    const topMis = Object.entries(d.misc || {}).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, v]) => `${MIS[k] || k}×${v}`).join('；');
+    return [s.classId, s.seatNo, s.name, d.entryLabel || '', d.readSec || 0, d.cpCount || 0, d.sieveDone ? '是' : '', d.examplesDone || 0, d.workbench || 0,
+      q.attempts || 0, q.correct || 0, q.validCorrect || 0, q.attempts ? Math.round(q.correct / q.attempts * 100) + '%' : '', q.rapid || 0, q.avgSec || 0,
+      d.mastered ? '是' : '', studentFlags(s).join('；'), topMis, new Date(s.updatedAt).toLocaleString('zh-TW', { hour12: false })];
+  });
+  const csv = '﻿' + [head, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+  try {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    a.download = `質因數分解_學習紀錄_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a); a.click(); a.remove();
+    toast('已下載 CSV。完整紀錄也在你的 Google 試算表裡。', 'ok');
+  } catch (e) { toast('這個環境不允許下載，請直接開啟 Google 試算表查看。', 'warn'); }
+}
+
+/* =====================================================================
+ * 啟動
+ * ===================================================================== */
+let appMode = 'student';
+function detectTeacherMode(cb) {
+  if (IS_GAS && google.script.url) { google.script.url.getLocation(loc => cb(!!(loc && loc.parameter && 'teacher' in loc.parameter))); return; }
+  cb(new URLSearchParams(location.search).has('teacher'));
+}
+function startStudent() {
+  appMode = 'student';
+  $('student-header').classList.remove('hidden'); $('student-main').classList.remove('hidden');
+  loadState();
+  $('login-desc').textContent = SYNC_ENABLED
+    ? '你的前測、微檢核和闖關紀錄會自動傳給老師，網路斷線時會先暫存，恢復後補傳。'
+    : '目前是本機模式：學習紀錄只會存在這台裝置上。';
+  $('login-sync-tag').textContent = SYNC_ENABLED ? '學習紀錄會傳給老師' : '本機模式';
+  $('footer-mode').textContent = IS_GAS ? 'Google 協作平台版' : (HAS_API ? 'GitHub Pages 版' : '本機模式');
+  setSyncBadge(SYNC_ENABLED ? (pending.length ? 'error' : 'ok') : 'local');
+  if (SYNC_ENABLED && !pending.length) $('cloud-sync-indicator').innerHTML = '<span class="w-2 h-2 rounded-full bg-slate-400"></span> 尚未傳送';
+  updateIdentityPill();
+  if (!hasProfile()) openLogin(); else if (pending.length) requestSync();
+
+  findAllFactors(false); updateMod1Badge();
+  renderCpMC(2); renderCpMC(3);
+  [1, 2, 3].forEach(i => setCpStatus(i, S.cp[i].p));
+  renderSieve(false);
+  if (S.sieveDone) $('sieve-progress').textContent = '✅ 曾完成（可再玩一次）';
+  wbNewNumber();
+  renderExamplesShell(); updateExProgress();
+  updateQuizStats();
+  switchTab(S.activeTab || 'tab-diag');
+}
+function startTeacher() {
+  appMode = 'teacher';
+  $('teacher-main').classList.remove('hidden');
+  $('footer-mode').textContent = '教師戰情室';
+  if (!SYNC_ENABLED) $('teacher-gate-desc').innerHTML = '⚠️ 這個網頁<strong>還沒設定 Apps Script 網址</strong>，戰情室只能預覽這台裝置的紀錄。請依部署說明設定 <code>API_URL</code>。';
+  const saved = ssGet('pf_teacher_key');
+  if (saved && SYNC_ENABLED) { $('teacher-pin-input').value = saved; unlockTeacherDashboard(); }
+}
+window.addEventListener('DOMContentLoaded', () => detectTeacherMode(isTeacher => isTeacher ? startTeacher() : startStudent()));
+</script>
+</body>
+</html>
