@@ -124,6 +124,11 @@ function getClassData(key) {
   return { ok: true, serverTime: new Date().toISOString(), students: students };
 }
 
+/** 協作平台版：學生頁的「教師監控」需要知道本程式的網址，才能另開戰情室視窗 */
+function getAppUrl() {
+  return ScriptApp.getService().getUrl();
+}
+
 /* ---------- 工具函式 ---------- */
 function ss_() {
   const id = PropertiesService.getScriptProperties().getProperty('SHEET_ID');
