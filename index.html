@@ -90,6 +90,28 @@
         <p id="login-error-msg" class="text-xs font-bold text-rose-600 hidden">⚠️ 請完整填寫班級、座號與姓名才能開始。</p>
       </div>
       <button onclick="confirmStudentIdentity()" class="touch-target w-full py-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-base shadow-lg shadow-indigo-200 transition">🚀 開始學習</button>
+      <div class="text-center"><button onclick="openTeacherLogin()" class="text-xs font-bold text-slate-400 hover:text-indigo-600 underline underline-offset-2">我是老師 → 開啟學習監控</button></div>
+    </div>
+  </div>
+
+  <!-- ==================== 教師登入（在學生頁輸入密碼，通過後另開新視窗） ==================== -->
+  <div id="teacher-login-modal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm hidden items-center justify-center p-4" style="z-index:75">
+    <div class="bg-white rounded-3xl max-w-sm w-full p-6 sm:p-7 shadow-2xl border border-slate-200 space-y-4">
+      <div class="flex items-center gap-3">
+        <div class="w-12 h-12 rounded-2xl bg-slate-900 text-amber-400 flex items-center justify-center text-2xl shrink-0">📡</div>
+        <div>
+          <span class="text-xs font-bold text-amber-900 bg-amber-100 px-2.5 py-0.5 rounded-full">教師專用</span>
+          <h2 class="text-lg font-black text-slate-800 mt-0.5">開啟學習監控</h2>
+        </div>
+      </div>
+      <p id="tl-desc" class="text-xs sm:text-sm text-slate-600 leading-relaxed">輸入教師密碼後，戰情室會在<strong>新視窗</strong>開啟；這個學生頁面不受影響。</p>
+      <input type="password" id="tl-pin" autocomplete="off" placeholder="教師密碼" class="touch-target w-full px-4 py-3 rounded-xl border-2 border-slate-300 font-black text-center text-lg text-slate-800 focus:outline-none focus:border-indigo-500" onkeydown="if(event.key==='Enter')submitTeacherLogin()">
+      <p id="tl-error" class="text-xs font-bold text-rose-600 hidden"></p>
+      <div id="tl-fallback" class="hidden text-xs font-bold text-amber-900 bg-amber-50 border border-amber-200 rounded-xl p-3 leading-relaxed"></div>
+      <div class="flex gap-3">
+        <button onclick="closeTeacherLogin()" class="touch-target flex-1 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 font-bold text-sm">取消</button>
+        <button id="tl-submit" onclick="submitTeacherLogin()" class="touch-target flex-[2] py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-sm">🔓 驗證並開啟</button>
+      </div>
     </div>
   </div>
 
@@ -626,7 +648,10 @@
   <footer class="bg-white border-t border-slate-200/80 py-5 mt-12">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between text-xs sm:text-sm text-slate-500 gap-2">
       <div>📘 國中七年級數學｜質因數分解互動學習網</div>
-      <div id="footer-mode"></div>
+      <div class="flex items-center gap-3">
+        <span id="footer-mode"></span>
+        <button id="footer-teacher-link" onclick="openTeacherLogin()" class="hidden font-bold text-slate-500 hover:text-indigo-600 underline underline-offset-2">🔒 教師監控</button>
+      </div>
     </div>
   </footer>
 
@@ -1491,6 +1516,62 @@ async function unlockTeacherDashboard() {
     teacherData = res; enterDashboard();
   } catch (e) { err.textContent = '❌ ' + (e.message || e); err.classList.remove('hidden'); }
 }
+/* ---------- 學生頁上的教師入口：驗證密碼 → 新視窗開啟戰情室 ---------- */
+const HANDOFF_KEY = 'pf_teacher_handoff';
+let tlBusy = false;
+function openTeacherLogin() {
+  $('tl-pin').value = ''; $('tl-error').classList.add('hidden'); $('tl-fallback').classList.add('hidden');
+  if (!SYNC_ENABLED) $('tl-desc').innerHTML = '⚠️ 這個網頁<strong>還沒設定 Apps Script 網址</strong>，不需要密碼；戰情室會在新視窗開啟，但只能預覽這台裝置的紀錄。';
+  showModal('teacher-login-modal', true);
+  setTimeout(() => $('tl-pin').focus(), 50);
+}
+function closeTeacherLogin() { showModal('teacher-login-modal', false); }
+function teacherPageUrl() {
+  if (IS_GAS) return new Promise((res, rej) => google.script.run.withSuccessHandler(u => u ? res(u + '?teacher=1') : rej(new Error('無法取得網址')))
+    .withFailureHandler(() => rej(new Error('請更新 Code.gs（需要 getAppUrl 函式）並部署新版本'))).getAppUrl());
+  return Promise.resolve(location.href.split('#')[0].split('?')[0] + '?teacher=1');
+}
+function writePopupMessage(w, text) {
+  try { w.document.title = '戰情室'; w.document.body.innerHTML = `<p style="font:600 18px sans-serif;color:#334155;text-align:center;margin-top:30vh">${text}</p>`; } catch (e) {}
+}
+async function submitTeacherLogin() {
+  if (tlBusy) return;
+  const key = $('tl-pin').value.trim(), err = $('tl-error'), fb = $('tl-fallback');
+  err.classList.add('hidden'); fb.classList.add('hidden');
+  if (SYNC_ENABLED && !key) { err.textContent = '請輸入教師密碼'; err.classList.remove('hidden'); return; }
+  // 必須在點擊當下先開視窗，否則瀏覽器會擋彈出視窗
+  const w = window.open('', 'pf_teacher_dashboard', 'width=1360,height=880');
+  if (w) writePopupMessage(w, '🔐 驗證中…');
+  tlBusy = true; $('tl-submit').textContent = '驗證中…';
+  try {
+    if (SYNC_ENABLED) {
+      const res = await fetchClassData(key);
+      if (!res || !res.ok) throw new Error(res && res.error || '無法讀取資料');
+    }
+    const url = await teacherPageUrl();
+    lsSet(HANDOFF_KEY, JSON.stringify({ key, exp: Date.now() + 120000 }));
+    if (w && !w.closed) {
+      w.location.href = url; w.focus();
+      closeTeacherLogin();
+      toast('📡 戰情室已在新視窗開啟', 'ok');
+    } else {
+      fb.innerHTML = `瀏覽器擋住了彈出視窗。請允許本網站開啟彈出視窗，或<a href="${esc(url)}" target="_blank" rel="noopener" class="underline text-indigo-700">點這裡開啟戰情室</a>。`;
+      fb.classList.remove('hidden');
+    }
+  } catch (e) {
+    if (w && !w.closed) w.close();
+    err.textContent = '❌ ' + (e.message || e); err.classList.remove('hidden');
+  } finally {
+    tlBusy = false; $('tl-submit').textContent = '🔓 驗證並開啟';
+  }
+}
+function takeHandoffKey() {
+  try {
+    const h = JSON.parse(lsGet(HANDOFF_KEY) || 'null'); lsDel(HANDOFF_KEY);
+    return h && h.exp > Date.now() ? h.key : null;
+  } catch (e) { return null; }
+}
+
 function enterDashboard() {
   $('teacher-auth-gate').classList.add('hidden');
   $('teacher-dashboard-content').classList.remove('hidden');
@@ -1656,6 +1737,7 @@ function startStudent() {
     : '目前是本機模式：學習紀錄只會存在這台裝置上。';
   $('login-sync-tag').textContent = SYNC_ENABLED ? '學習紀錄會傳給老師' : '本機模式';
   $('footer-mode').textContent = IS_GAS ? 'Google 協作平台版' : (HAS_API ? 'GitHub Pages 版' : '本機模式');
+  $('footer-teacher-link').classList.remove('hidden');
   setSyncBadge(SYNC_ENABLED ? (pending.length ? 'error' : 'ok') : 'local');
   if (SYNC_ENABLED && !pending.length) $('cloud-sync-indicator').innerHTML = '<span class="w-2 h-2 rounded-full bg-slate-400"></span> 尚未傳送';
   updateIdentityPill();
@@ -1675,8 +1757,12 @@ function startTeacher() {
   appMode = 'teacher';
   $('teacher-main').classList.remove('hidden');
   $('footer-mode').textContent = '教師戰情室';
+  document.title = '📡 戰情室｜質因數分解互動學習網';
   if (!SYNC_ENABLED) $('teacher-gate-desc').innerHTML = '⚠️ 這個網頁<strong>還沒設定 Apps Script 網址</strong>，戰情室只能預覽這台裝置的紀錄。請依部署說明設定 <code>API_URL</code>。';
-  const saved = ssGet('pf_teacher_key');
+  // 從學生頁「教師監控」開過來的視窗：沿用剛才驗證過的密碼，不用再輸入一次
+  const handed = takeHandoffKey();
+  if (handed !== null && !SYNC_ENABLED) { enterDashboard(); return; }
+  const saved = handed || ssGet('pf_teacher_key');
   if (saved && SYNC_ENABLED) { $('teacher-pin-input').value = saved; unlockTeacherDashboard(); }
 }
 window.addEventListener('DOMContentLoaded', () => detectTeacherMode(isTeacher => isTeacher ? startTeacher() : startStudent()));
